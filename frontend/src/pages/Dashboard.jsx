@@ -62,7 +62,7 @@ export default function Dashboard() {
           </h1>
           <p className="text-slate-500 text-sm mt-0.5 capitalize">{today}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button
             onClick={() => navigate("/agenda")}
             variant="outline"

@@ -136,6 +136,10 @@ export default function Agenda() {
     e.preventDefault();
     if (!form.patient_id) { setError("Selecciona un paciente"); return; }
     if (!form.date || !form.time) { setError("Fecha y hora son requeridas"); return; }
+
+    const apptDateTime = new Date(`${form.date}T${form.time}:00`);
+    if (apptDateTime < new Date()) { setError("No se puede agendar una cita en el pasado"); return; }
+
     setSaving(true); setError("");
     try {
       if (editAppt) {
@@ -167,19 +171,6 @@ export default function Agenda() {
     fetchMonth(toMonthStr(calMonth));
   };
 
-  const [reminding, setReminding] = useState(null);
-  const handleSendReminder = async (appt) => {
-    setReminding(appt.id);
-    try {
-      await axios.post(`${API}/appointments/${appt.id}/send-reminder`, {}, { withCredentials: true });
-      window.alert(`Recordatorio enviado a ${appt.patient_name}`);
-      fetchDay(toDateStr(selected));
-    } catch (err) {
-      window.alert(err.response?.data?.detail || "No se pudo enviar el recordatorio");
-    } finally {
-      setReminding(null);
-    }
-  };
 
   const selectedStr = toDateStr(selected);
   const isToday = selectedStr === toDateStr(today);
@@ -305,24 +296,7 @@ export default function Agenda() {
 
                     {/* Actions */}
                     <div className="flex items-center gap-1 flex-shrink-0">
-                      <button
-                        onClick={() => handleSendReminder(appt)}
-                        disabled={reminding === appt.id}
-                        className={`p-1.5 hover:bg-slate-50 rounded disabled:opacity-50 ${
-                          appt.email_reminder_sent
-                            ? "text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
-                            : "text-slate-400 hover:text-blue-600 hover:bg-blue-50"
-                        }`}
-                        title={appt.email_reminder_sent
-                          ? `Reenviar recordatorio (enviado a ${appt.email_reminder_to || "paciente"})`
-                          : "Enviar recordatorio por email"}
-                        data-testid={appt.email_reminder_sent
-                          ? `appt-reminder-sent-${appt.id}`
-                          : `appt-send-reminder-${appt.id}`}>
-                        {appt.email_reminder_sent
-                          ? <MailCheck size={14} className={reminding === appt.id ? "animate-pulse" : ""} />
-                          : <Mail size={14} className={reminding === appt.id ? "animate-pulse" : ""} />}
-                      </button>
+
                       <button
                         onClick={() => navigate(`/pacientes/${appt.patient_id}`)}
                         className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded"

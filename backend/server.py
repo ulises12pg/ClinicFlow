@@ -7,9 +7,6 @@ from fastapi.responses import Response as FastResponse
 from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
 import os, jwt, bcrypt, logging, uuid, asyncio, requests as req_lib
-import resend
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Any, Annotated
 from pydantic import BaseModel, BeforeValidator, Field
@@ -561,6 +558,11 @@ async def create_appt(data: ApptCreate, u: dict = Depends(current_user)):
     p = await db.patients.find_one({"_id": ObjectId(data.patient_id)})
     if not p:
         raise HTTPException(404, "Paciente no encontrado")
+        
+    appt_dt = datetime.strptime(f"{data.date} {data.time}", "%Y-%m-%d %H:%M")
+    if appt_dt < datetime.now():
+        raise HTTPException(400, "No se puede agendar una cita en el pasado")
+        
     doc = {"patient_id": data.patient_id, "patient_name": p["name"],
            "doctor_id": u["id"], "doctor_name": u["name"],
            "date": data.date, "time": data.time, "duration": data.duration,
@@ -591,174 +593,6 @@ async def delete_appt(aid: str, u: dict = Depends(current_user)):
     await db.appointments.delete_one({"_id": ObjectId(aid)})
     return {"ok": True}
 
-# --- Reminder helpers ---
-APPT_TYPE_LABELS = {
-    "consulta":    "Consulta General",
-    "seguimiento": "Seguimiento",
-    "urgencia":    "Urgencia",
-    "preventiva":  "Preventiva",
-}
-
-def _format_appt_date(date_str: str) -> str:
-    """YYYY-MM-DD -> 'lunes, 12 de mayo de 2026'."""
-    months = ["enero","febrero","marzo","abril","mayo","junio",
-              "julio","agosto","septiembre","octubre","noviembre","diciembre"]
-    weekdays = ["lunes","martes","miércoles","jueves","viernes","sábado","domingo"]
-    try:
-        d = datetime.strptime(date_str, "%Y-%m-%d")
-        return f"{weekdays[d.weekday()]}, {d.day} de {months[d.month-1]} de {d.year}"
-    except Exception:
-        return date_str
-
-def _build_reminder_html(appt: dict, clinic_name: str, clinic_phone: str, clinic_address: str) -> str:
-    type_label = APPT_TYPE_LABELS.get(appt.get("type", "consulta"), "Consulta")
-    pretty_date = _format_appt_date(appt["date"])
-    notes_block = ""
-    if appt.get("notes"):
-        notes_block = f"""
-        <tr><td style="padding:8px 0;color:#475569;font-size:14px;">
-          <strong>Motivo:</strong> {appt['notes']}
-        </td></tr>"""
-    phone_block = ""
-    if clinic_phone:
-        phone_block = f"<p style='margin:4px 0;color:#64748b;font-size:13px;'>Tel: {clinic_phone}</p>"
-    addr_block = ""
-    if clinic_address:
-        addr_block = f"<p style='margin:4px 0;color:#64748b;font-size:13px;'>{clinic_address}</p>"
-    return f"""<!DOCTYPE html>
-<html><body style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;padding:32px 16px;">
-    <tr><td align="center">
-      <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;overflow:hidden;">
-        <tr><td style="background:#2563eb;padding:24px 28px;color:#ffffff;">
-          <h1 style="margin:0;font-size:20px;font-weight:700;">Recordatorio de Cita Médica</h1>
-          <p style="margin:4px 0 0 0;font-size:13px;opacity:0.9;">{clinic_name}</p>
-        </td></tr>
-        <tr><td style="padding:28px;">
-          <p style="margin:0 0 16px 0;font-size:15px;color:#0f172a;">Hola <strong>{appt['patient_name']}</strong>,</p>
-          <p style="margin:0 0 20px 0;font-size:14px;color:#475569;line-height:1.55;">
-            Le recordamos que tiene una cita médica programada para <strong>mañana</strong>.
-          </p>
-          <table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;border-radius:8px;padding:16px 20px;margin-bottom:20px;">
-            <tr><td style="padding:8px 0;color:#0f172a;font-size:14px;">
-              <strong>Fecha:</strong> <span style="text-transform:capitalize;">{pretty_date}</span>
-            </td></tr>
-            <tr><td style="padding:8px 0;color:#0f172a;font-size:14px;">
-              <strong>Hora:</strong> {appt['time']} ({appt.get('duration', 30)} min)
-            </td></tr>
-            <tr><td style="padding:8px 0;color:#0f172a;font-size:14px;">
-              <strong>Tipo:</strong> {type_label}
-            </td></tr>
-            <tr><td style="padding:8px 0;color:#0f172a;font-size:14px;">
-              <strong>Médico:</strong> Dr. {appt.get('doctor_name', '')}
-            </td></tr>
-            {notes_block}
-          </table>
-          <p style="margin:0 0 8px 0;font-size:13px;color:#64748b;line-height:1.5;">
-            Si necesita reagendar o cancelar su cita, por favor contáctenos lo antes posible.
-          </p>
-        </td></tr>
-        <tr><td style="background:#f8fafc;padding:18px 28px;border-top:1px solid #e2e8f0;text-align:center;">
-          <p style="margin:0;color:#0f172a;font-size:13px;font-weight:600;">{clinic_name}</p>
-          {phone_block}
-          {addr_block}
-        </td></tr>
-      </table>
-      <p style="margin:16px 0 0 0;color:#94a3b8;font-size:11px;">Este es un recordatorio automático. No responda a este correo.</p>
-    </td></tr>
-  </table>
-</body></html>"""
-
-async def _get_clinic_settings() -> dict:
-    s = await db.settings.find_one({"_id": "main"})
-    return s or {}
-
-async def send_reminder_for_appt(appt: dict) -> dict:
-    """Send reminder email for one appointment. Returns {sent, reason}."""
-    api_key = os.environ.get("RESEND_API_KEY")
-    sender_email = os.environ.get("SENDER_EMAIL", "onboarding@resend.dev")
-    sender_name = os.environ.get("SENDER_NAME", "Consultorio Médico")
-    if not api_key:
-        return {"sent": False, "reason": "RESEND_API_KEY no configurado"}
-
-    patient = await db.patients.find_one({"_id": ObjectId(appt["patient_id"])})
-    if not patient:
-        return {"sent": False, "reason": "Paciente no encontrado"}
-    p_email = (patient.get("email") or "").strip()
-    if not p_email:
-        return {"sent": False, "reason": "Paciente sin email registrado"}
-
-    settings = await _get_clinic_settings()
-    clinic_name = settings.get("clinic_name") or sender_name
-    clinic_phone = settings.get("clinic_phone") or ""
-    clinic_address = settings.get("clinic_address") or ""
-
-    html = _build_reminder_html(appt, clinic_name, clinic_phone, clinic_address)
-    subject = f"Recordatorio: cita el {appt['date']} a las {appt['time']}"
-
-    resend.api_key = api_key
-    params = {
-        "from": f"{clinic_name} <{sender_email}>",
-        "to": [p_email],
-        "subject": subject,
-        "html": html,
-    }
-    try:
-        result = await asyncio.to_thread(resend.Emails.send, params)
-        email_id = result.get("id") if isinstance(result, dict) else None
-        await db.appointments.update_one(
-            {"_id": ObjectId(appt["id"] if "id" in appt else appt["_id"])},
-            {"$set": {"email_reminder_sent": True,
-                      "email_reminder_sent_at": datetime.now(timezone.utc).isoformat(),
-                      "email_reminder_to": p_email,
-                      "email_reminder_id": email_id}}
-        )
-        return {"sent": True, "email_id": email_id, "to": p_email}
-    except Exception as e:
-        logger.error(f"Resend send failed for appt {appt.get('id')}: {e}")
-        return {"sent": False, "reason": f"Error de Resend: {str(e)}"}
-
-@appt.post("/{aid}/send-reminder")
-async def send_reminder_endpoint(aid: str, u: dict = Depends(current_user)):
-    if u.get("role") not in ("admin", "doctor"):
-        raise HTTPException(403, "Solo administradores o médicos pueden enviar recordatorios")
-    if not ObjectId.is_valid(aid):
-        raise HTTPException(404, "Cita no encontrada")
-    a = await db.appointments.find_one({"_id": ObjectId(aid)})
-    if not a:
-        raise HTTPException(404, "Cita no encontrada")
-    a["id"] = str(a["_id"])
-    result = await send_reminder_for_appt(a)
-    if not result["sent"]:
-        raise HTTPException(400, result.get("reason", "No se pudo enviar"))
-    return result
-
-async def daily_reminder_job():
-    """Find tomorrow's non-cancelled appointments and send reminders."""
-    tomorrow = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%d")
-    cursor = db.appointments.find({
-        "date": tomorrow,
-        "status": {"$ne": "cancelada"},
-        "email_reminder_sent": {"$ne": True},
-    })
-    sent = 0; failed = 0; skipped = 0
-    async for a in cursor:
-        a["id"] = str(a["_id"])
-        r = await send_reminder_for_appt(a)
-        if r["sent"]:
-            sent += 1
-        elif r.get("reason", "").startswith("Paciente sin email"):
-            skipped += 1
-        else:
-            failed += 1
-    logger.info(f"Daily reminder job for {tomorrow}: sent={sent} skipped={skipped} failed={failed}")
-    return {"date": tomorrow, "sent": sent, "skipped": skipped, "failed": failed}
-
-@appt.post("/run-daily-reminders-now")
-async def run_daily_reminders_now(u: dict = Depends(current_user)):
-    if u.get("role") != "admin":
-        raise HTTPException(403, "Solo administradores")
-    return await daily_reminder_job()
 
 # ===================== SETTINGS =====================
 cfg = APIRouter(prefix="/settings", tags=["settings"])
@@ -856,8 +690,6 @@ for router in [auth, users_r, pts, rxs, inv, dash, cfg, upload_r, appt]:
     api.include_router(router)
 app.include_router(api)
 
-scheduler = AsyncIOScheduler()
-
 @app.on_event("startup")
 async def startup():
     await db.users.create_index("email", unique=True)
@@ -911,35 +743,14 @@ async def startup():
 - POST /api/appointments
 - PUT /api/appointments/{{id}}
 - DELETE /api/appointments/{{id}}
-- POST /api/appointments/{{id}}/send-reminder
-- POST /api/appointments/run-daily-reminders-now (admin)
 - GET /api/dashboard/stats
 - GET /api/users (admin only)
 """)
     except Exception as e:
         logger.warning(f"Could not write test_credentials.md (non-fatal): {e}")
 
-    # Schedule daily reminders
-    try:
-        hour = int(os.environ.get("REMINDER_HOUR", "20"))
-        tz = os.environ.get("TIMEZONE", "America/Mexico_City")
-        scheduler.add_job(
-            daily_reminder_job,
-            CronTrigger(hour=hour, minute=0, timezone=tz),
-            id="daily_appt_reminders", replace_existing=True,
-        )
-        scheduler.start()
-        logger.info(f"Reminder scheduler started: every day at {hour}:00 ({tz})")
-    except Exception as e:
-        logger.warning(f"Scheduler setup failed (non-fatal): {e}")
-
     logger.info("Startup complete")
 
 @app.on_event("shutdown")
 async def shutdown():
-    try:
-        if scheduler.running:
-            scheduler.shutdown(wait=False)
-    except Exception as e:
-        logger.warning(f"Scheduler shutdown error: {e}")
     client.close()

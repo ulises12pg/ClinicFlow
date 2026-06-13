@@ -21,15 +21,11 @@ passlib>=1.7.4
 pydantic[email]>=2.7.0
 email-validator>=2.1.0
 
-# Scheduler (recordatorios automáticos)
-APScheduler>=3.10.0
 
 # HTTP client (object storage fallback)
 requests>=2.31.0
 httpx>=0.27.0
 
-# Email (recordatorios)
-resend>=0.8.0
 
 # Environment
 python-dotenv>=1.0.0

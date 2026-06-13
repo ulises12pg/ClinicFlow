@@ -14,6 +14,36 @@ import {
 
 const BACKEND = process.env.REACT_APP_BACKEND_URL;
 
+const Field = ({ label, icon: Icon, field, type = "text", placeholder = "", multiline = false, value, onChange, disabled }) => (
+  <div className="space-y-1.5">
+    <Label className="text-sm font-medium text-slate-700 flex items-center gap-1.5">
+      {Icon && <Icon size={13} className="text-slate-400" />}
+      {label}
+    </Label>
+    {multiline ? (
+      <Textarea
+        value={value || ""}
+        onChange={e => onChange(field, e.target.value)}
+        placeholder={placeholder}
+        disabled={disabled}
+        className="resize-none text-sm"
+        rows={2}
+        data-testid={`settings-${field}`}
+      />
+    ) : (
+      <Input
+        type={type}
+        value={value || ""}
+        onChange={e => onChange(field, e.target.value)}
+        placeholder={placeholder}
+        disabled={disabled}
+        className="h-10 text-sm"
+        data-testid={`settings-${field}`}
+      />
+    )}
+  </div>
+);
+
 export default function SettingsPage() {
   const { user } = useAuth();
   const { settings, refreshSettings } = useSettings();
@@ -104,35 +134,9 @@ export default function SettingsPage() {
   const previewLogoUrl = settings?.has_logo ? `${BACKEND}/api/logo?v=${settings._v}` : null;
   const initial = (form.clinic_name || "M")[0].toUpperCase();
 
-  const Field = ({ label, icon: Icon, field, type = "text", placeholder = "", multiline = false }) => (
-    <div className="space-y-1.5">
-      <Label className="text-sm font-medium text-slate-700 flex items-center gap-1.5">
-        {Icon && <Icon size={13} className="text-slate-400" />}
-        {label}
-      </Label>
-      {multiline ? (
-        <Textarea
-          value={form[field] || ""}
-          onChange={e => setForm(f => ({ ...f, [field]: e.target.value }))}
-          placeholder={placeholder}
-          disabled={!isAdmin}
-          className="resize-none text-sm"
-          rows={2}
-          data-testid={`settings-${field}`}
-        />
-      ) : (
-        <Input
-          type={type}
-          value={form[field] || ""}
-          onChange={e => setForm(f => ({ ...f, [field]: e.target.value }))}
-          placeholder={placeholder}
-          disabled={!isAdmin}
-          className="h-10 text-sm"
-          data-testid={`settings-${field}`}
-        />
-      )}
-    </div>
-  );
+  const handleFieldChange = (field, value) => {
+    setForm(f => ({ ...f, [field]: value }));
+  };
 
   return (
     <div className="space-y-6 page-enter max-w-2xl">
@@ -162,14 +166,14 @@ export default function SettingsPage() {
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="sm:col-span-2">
-              <Field label="Nombre del consultorio" field="clinic_name" placeholder="Ej: Consultorio Dr. García" />
+              <Field label="Nombre del consultorio" field="clinic_name" placeholder="Ej: Consultorio Dr. García" value={form.clinic_name} onChange={handleFieldChange} disabled={!isAdmin} />
             </div>
-            <Field label="Especialidad" icon={Stethoscope} field="clinic_specialty" placeholder="Ej: Medicina General, Pediatría" />
-            <Field label="Cédula Profesional" icon={FileText} field="license_number" placeholder="Ej: 12345678" />
-            <Field label="Teléfono" icon={Phone} field="clinic_phone" placeholder="Ej: 555-000-0000" />
-            <Field label="Correo electrónico" icon={Mail} field="clinic_email" type="email" placeholder="consultorio@ejemplo.com" />
+            <Field label="Especialidad" icon={Stethoscope} field="clinic_specialty" placeholder="Ej: Medicina General, Pediatría" value={form.clinic_specialty} onChange={handleFieldChange} disabled={!isAdmin} />
+            <Field label="Cédula Profesional" icon={FileText} field="license_number" placeholder="Ej: 12345678" value={form.license_number} onChange={handleFieldChange} disabled={!isAdmin} />
+            <Field label="Teléfono" icon={Phone} field="clinic_phone" placeholder="Ej: 555-000-0000" value={form.clinic_phone} onChange={handleFieldChange} disabled={!isAdmin} />
+            <Field label="Correo electrónico" icon={Mail} field="clinic_email" type="email" placeholder="consultorio@ejemplo.com" value={form.clinic_email} onChange={handleFieldChange} disabled={!isAdmin} />
             <div className="sm:col-span-2">
-              <Field label="Dirección" icon={MapPin} field="clinic_address" placeholder="Calle, colonia, ciudad..." multiline />
+              <Field label="Dirección" icon={MapPin} field="clinic_address" placeholder="Calle, colonia, ciudad..." multiline value={form.clinic_address} onChange={handleFieldChange} disabled={!isAdmin} />
             </div>
           </div>
         </div>
