@@ -1,13 +1,13 @@
 {
   "files": {
-    "main.css": "/ClinicFlow/static/css/main.d646f696.css",
-    "main.js": "/ClinicFlow/static/js/main.b72567d1.js",
+    "main.css": "/ClinicFlow/static/css/main.afdfa29b.css",
+    "main.js": "/ClinicFlow/static/js/main.aa7d3073.js",
     "index.html": "/ClinicFlow/index.html",
-    "main.d646f696.css.map": "/ClinicFlow/static/css/main.d646f696.css.map",
-    "main.b72567d1.js.map": "/ClinicFlow/static/js/main.b72567d1.js.map"
+    "main.afdfa29b.css.map": "/ClinicFlow/static/css/main.afdfa29b.css.map",
+    "main.aa7d3073.js.map": "/ClinicFlow/static/js/main.aa7d3073.js.map"
   },
   "entrypoints": [
-    "static/css/main.d646f696.css",
-    "static/js/main.b72567d1.js"
+    "static/css/main.afdfa29b.css",
+    "static/js/main.aa7d3073.js"
   ]
 }
