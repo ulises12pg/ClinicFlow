@@ -559,10 +559,6 @@ async def create_appt(data: ApptCreate, u: dict = Depends(current_user)):
     if not p:
         raise HTTPException(404, "Paciente no encontrado")
         
-    appt_dt = datetime.strptime(f"{data.date} {data.time}", "%Y-%m-%d %H:%M")
-    if appt_dt < datetime.now():
-        raise HTTPException(400, "No se puede agendar una cita en el pasado")
-        
     doc = {"patient_id": data.patient_id, "patient_name": p["name"],
            "doctor_id": u["id"], "doctor_name": u["name"],
            "date": data.date, "time": data.time, "duration": data.duration,

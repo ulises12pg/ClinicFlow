@@ -138,7 +138,13 @@ export default function Agenda() {
     if (!form.date || !form.time) { setError("Fecha y hora son requeridas"); return; }
 
     const apptDateTime = new Date(`${form.date}T${form.time}:00`);
-    if (apptDateTime < new Date()) { setError("No se puede agendar una cita en el pasado"); return; }
+    const limitTime = new Date();
+    limitTime.setHours(limitTime.getHours() + 1);
+    
+    if (apptDateTime < limitTime) { 
+      setError("La cita debe programarse con al menos 1 hora de anticipación"); 
+      return; 
+    }
 
     setSaving(true); setError("");
     try {
