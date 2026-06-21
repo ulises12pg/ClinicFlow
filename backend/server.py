@@ -1,16 +1,19 @@
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, UploadFile, File
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, UploadFile, File, Query, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response as FastResponse
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import Response as FastResponse, StreamingResponse
 from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
-import os, jwt, bcrypt, logging, uuid, asyncio, requests as req_lib
+import os, jwt, bcrypt, logging, uuid, asyncio, requests as req_lib, re, io, json, zipfile
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Any, Annotated
 from pydantic import BaseModel, BeforeValidator, Field
 from pathlib import Path
+from collections import defaultdict
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -83,6 +86,44 @@ def validate_oid(v: Any) -> str:
     raise ValueError(f"Invalid ObjectId: {v}")
 
 PyObjectId = Annotated[str, BeforeValidator(validate_oid)]
+
+# --- Safe ObjectId: returns 400 instead of 500 for invalid IDs ---
+def safe_oid(value: str, label: str = "ID") -> ObjectId:
+    """Convert a string to ObjectId, raising HTTP 400 if invalid."""
+    if not ObjectId.is_valid(value):
+        raise HTTPException(400, f"{label} inválido: {value}")
+    return ObjectId(value)
+
+# --- Regex sanitization for search queries ---
+def safe_regex(pattern: str) -> str:
+    """Escape special regex characters to prevent ReDoS attacks."""
+    return re.escape(pattern)
+
+# --- Rate Limiter (in-memory, per-IP) ---
+class RateLimiter:
+    """Simple in-memory rate limiter. Tracks attempts per key within a time window."""
+    def __init__(self, max_attempts: int = 5, window_seconds: int = 900):
+        self.max_attempts = max_attempts
+        self.window_seconds = window_seconds
+        self._attempts: dict[str, list[float]] = defaultdict(list)
+
+    def is_limited(self, key: str) -> bool:
+        now = datetime.now(timezone.utc).timestamp()
+        cutoff = now - self.window_seconds
+        # Purge old entries
+        self._attempts[key] = [t for t in self._attempts[key] if t > cutoff]
+        return len(self._attempts[key]) >= self.max_attempts
+
+    def record(self, key: str):
+        self._attempts[key].append(datetime.now(timezone.utc).timestamp())
+
+    def remaining(self, key: str) -> int:
+        now = datetime.now(timezone.utc).timestamp()
+        cutoff = now - self.window_seconds
+        self._attempts[key] = [t for t in self._attempts[key] if t > cutoff]
+        return max(0, self.max_attempts - len(self._attempts[key]))
+
+login_limiter = RateLimiter(max_attempts=5, window_seconds=900)
 
 # --- DB ---
 client = AsyncIOMotorClient(os.environ["MONGO_URL"])
@@ -158,8 +199,52 @@ def s(doc: dict) -> dict:
         doc["id"] = str(doc.pop("_id"))
     return doc
 
+# --- Lifespan (replaces deprecated on_event) ---
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # --- STARTUP ---
+    await db.users.create_index("email", unique=True)
+    await db.patients.create_index([("name", 1)])
+    await db.prescriptions.create_index([("patient_id", 1)])
+    await db.prescriptions.create_index([("date", 1)])
+    await db.inventory.create_index([("name", 1)])
+    await db.appointments.create_index([("date", 1), ("doctor_id", 1)])
+    await db.appointments.create_index([("patient_id", 1)])
+    await db.backup_history.create_index([("created_at", -1)])
+
+    try:
+        init_storage()
+        logger.info("Object storage initialized")
+    except Exception as e:
+        logger.warning(f"Storage init failed (non-fatal): {e}")
+
+    admin_email = os.environ.get("ADMIN_EMAIL", "admin@medconsulta.com")
+    admin_pw = os.environ.get("ADMIN_PASSWORD", "Admin123!")
+    existing = await db.users.find_one({"email": admin_email})
+    if not existing:
+        await db.users.insert_one({
+            "name": "Administrador", "email": admin_email,
+            "password_hash": hash_pw(admin_pw), "role": "admin",
+            "specialization": "Administración del Sistema",
+            "created_at": datetime.now(timezone.utc).isoformat()
+        })
+        logger.info(f"Admin user created: {admin_email}")
+    elif not verify_pw(admin_pw, existing["password_hash"]):
+        await db.users.update_one({"email": admin_email},
+                                   {"$set": {"password_hash": hash_pw(admin_pw)}})
+
+    logger.info("Startup complete")
+    
+    yield  # --- APP RUNS ---
+    
+    # --- SHUTDOWN ---
+    client.close()
+
 # --- App & CORS ---
-app = FastAPI(title="MedConsulta API")
+app = FastAPI(title="MedConsulta API", lifespan=lifespan)
+
+# GZip compression for responses > 500 bytes
+app.add_middleware(GZipMiddleware, minimum_size=500)
 
 cors_str = os.environ.get("CORS_ORIGINS", "")
 if cors_str and cors_str != "*":
@@ -174,33 +259,54 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Content-Disposition"],
 )
+
+# --- Security Headers Middleware ---
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    return response
+
+# Cookie security
+_FRONTEND_URL = os.environ.get("FRONTEND_URL", "")
+COOKIE_SECURE = _FRONTEND_URL.startswith("https://")
+COOKIE_SAMESITE = "none" if COOKIE_SECURE else "lax"
 
 api = APIRouter(prefix="/api")
 
 # ===================== AUTH =====================
 auth = APIRouter(prefix="/auth", tags=["auth"])
 
-# Cookie security: True for HTTPS production, False for local dev
-_FRONTEND_URL = os.environ.get("FRONTEND_URL", "")
-COOKIE_SECURE = _FRONTEND_URL.startswith("https://")
-
 class LoginReq(BaseModel):
     email: str
     password: str
 
 @auth.post("/login")
-async def login(req: LoginReq, resp: Response):
+async def login(req: LoginReq, request: Request, resp: Response):
+    # Rate limiting by IP
+    client_ip = request.client.host if request.client else "unknown"
+    if login_limiter.is_limited(client_ip):
+        raise HTTPException(429, "Demasiados intentos de inicio de sesión. Intenta de nuevo en 15 minutos.")
+    
     u = await db.users.find_one({"email": req.email.lower().strip()})
     if not u or not verify_pw(req.password, u["password_hash"]):
-        raise HTTPException(401, "Credenciales incorrectas")
+        login_limiter.record(client_ip)
+        remaining = login_limiter.remaining(client_ip)
+        raise HTTPException(401, f"Credenciales incorrectas. {remaining} intento(s) restante(s).")
+    
     uid = str(u["_id"])
     at = make_access_token(uid, u["email"])
     rt = make_refresh_token(uid)
     resp.set_cookie("access_token", at,
-                    httponly=True, secure=COOKIE_SECURE, samesite="none", max_age=28800, path="/")
+                    httponly=True, secure=COOKIE_SECURE, samesite=COOKIE_SAMESITE, max_age=28800, path="/")
     resp.set_cookie("refresh_token", rt,
-                    httponly=True, secure=COOKIE_SECURE, samesite="none", max_age=604800, path="/")
+                    httponly=True, secure=COOKIE_SECURE, samesite=COOKIE_SAMESITE, max_age=604800, path="/")
     return {"id": uid, "name": u["name"], "email": u["email"],
             "role": u["role"], "specialization": u.get("specialization"),
             "access_token": at, "refresh_token": rt}
@@ -228,7 +334,7 @@ async def refresh(request: Request, resp: Response):
         if not u:
             raise HTTPException(401, "Usuario no encontrado")
         at = make_access_token(str(u["_id"]), u["email"])
-        resp.set_cookie("access_token", at, httponly=True, secure=COOKIE_SECURE, samesite="none", max_age=28800, path="/")
+        resp.set_cookie("access_token", at, httponly=True, secure=COOKIE_SECURE, samesite=COOKIE_SAMESITE, max_age=28800, path="/")
         return {"ok": True, "access_token": at}
     except jwt.InvalidTokenError:
         raise HTTPException(401, "Token inválido")
@@ -276,6 +382,7 @@ async def create_user(data: UserCreate, u: dict = Depends(current_user)):
 async def update_user(uid: str, data: UserUpdate, u: dict = Depends(current_user)):
     if u["role"] != "admin":
         raise HTTPException(403, "Acceso denegado")
+    safe_oid(uid, "ID de usuario")
     upd = {k: v for k, v in data.model_dump().items() if v is not None}
     if upd:
         await db.users.update_one({"_id": ObjectId(uid)}, {"$set": upd})
@@ -285,6 +392,7 @@ async def update_user(uid: str, data: UserUpdate, u: dict = Depends(current_user
 async def delete_user(uid: str, u: dict = Depends(current_user)):
     if u["role"] != "admin":
         raise HTTPException(403, "Acceso denegado")
+    safe_oid(uid, "ID de usuario")
     if uid == u["id"]:
         raise HTTPException(400, "No puedes eliminar tu propia cuenta")
     await db.users.delete_one({"_id": ObjectId(uid)})
@@ -318,12 +426,18 @@ class PatientUpdate(BaseModel):
     notes: Optional[str] = None
 
 @pts.get("")
-async def list_patients(search: Optional[str] = None, u: dict = Depends(current_user)):
+async def list_patients(
+    search: Optional[str] = None,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(200, ge=1, le=1000),
+    u: dict = Depends(current_user)
+):
     q = {}
     if search:
-        q["$or"] = [{"name": {"$regex": search, "$options": "i"}},
-                    {"phone": {"$regex": search, "$options": "i"}}]
-    result = await db.patients.find(q).sort("name", 1).to_list(1000)
+        escaped = safe_regex(search)
+        q["$or"] = [{"name": {"$regex": escaped, "$options": "i"}},
+                    {"phone": {"$regex": escaped, "$options": "i"}}]
+    result = await db.patients.find(q).sort("name", 1).skip(skip).limit(limit).to_list(limit)
     return [s(p) for p in result]
 
 @pts.post("")
@@ -338,6 +452,7 @@ async def create_patient(data: PatientCreate, u: dict = Depends(current_user)):
 
 @pts.get("/{pid}")
 async def get_patient(pid: str, u: dict = Depends(current_user)):
+    safe_oid(pid, "ID de paciente")
     p = await db.patients.find_one({"_id": ObjectId(pid)})
     if not p:
         raise HTTPException(404, "Paciente no encontrado")
@@ -345,6 +460,7 @@ async def get_patient(pid: str, u: dict = Depends(current_user)):
 
 @pts.put("/{pid}")
 async def update_patient(pid: str, data: PatientUpdate, u: dict = Depends(current_user)):
+    safe_oid(pid, "ID de paciente")
     upd = {k: v for k, v in data.model_dump().items() if v is not None}
     upd["updated_at"] = datetime.now(timezone.utc).isoformat()
     await db.patients.update_one({"_id": ObjectId(pid)}, {"$set": upd})
@@ -354,6 +470,7 @@ async def update_patient(pid: str, data: PatientUpdate, u: dict = Depends(curren
 async def delete_patient(pid: str, u: dict = Depends(current_user)):
     if u["role"] not in ["admin", "doctor"]:
         raise HTTPException(403, "Acceso denegado")
+    safe_oid(pid, "ID de paciente")
     await db.patients.delete_one({"_id": ObjectId(pid)})
     return {"ok": True}
 
@@ -383,17 +500,24 @@ class PrescriptionUpdate(BaseModel):
     status: Optional[str] = None
 
 @rxs.get("")
-async def list_prescriptions(patient_id: Optional[str] = None, u: dict = Depends(current_user)):
+async def list_prescriptions(
+    patient_id: Optional[str] = None,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(200, ge=1, le=1000),
+    u: dict = Depends(current_user)
+):
     q = {}
     if patient_id:
+        safe_oid(patient_id, "ID de paciente")
         q["patient_id"] = patient_id
-    result = await db.prescriptions.find(q).sort("created_at", -1).to_list(1000)
+    result = await db.prescriptions.find(q).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
     return [s(p) for p in result]
 
 @rxs.post("")
 async def create_prescription(data: PrescriptionCreate, u: dict = Depends(current_user)):
     if u["role"] not in ["admin", "doctor"]:
         raise HTTPException(403, "Solo médicos pueden crear recetas")
+    safe_oid(data.patient_id, "ID de paciente")
     p = await db.patients.find_one({"_id": ObjectId(data.patient_id)})
     if not p:
         raise HTTPException(404, "Paciente no encontrado")
@@ -403,8 +527,7 @@ async def create_prescription(data: PrescriptionCreate, u: dict = Depends(curren
     if data.dispense_from_inventory:
         for m in data.medications:
             if m.inventory_id and m.quantity_dispensed and m.quantity_dispensed > 0:
-                if not ObjectId.is_valid(m.inventory_id):
-                    raise HTTPException(400, f"ID de inventario inválido para '{m.name}'")
+                safe_oid(m.inventory_id, f"ID de inventario para '{m.name}'")
                 inv_doc = await db.inventory.find_one({"_id": ObjectId(m.inventory_id)})
                 if not inv_doc:
                     raise HTTPException(404, f"Medicamento '{m.name}' no existe en inventario")
@@ -455,6 +578,7 @@ async def create_prescription(data: PrescriptionCreate, u: dict = Depends(curren
 
 @rxs.get("/{rid}")
 async def get_prescription(rid: str, u: dict = Depends(current_user)):
+    safe_oid(rid, "ID de receta")
     r = await db.prescriptions.find_one({"_id": ObjectId(rid)})
     if not r:
         raise HTTPException(404, "Receta no encontrada")
@@ -462,6 +586,7 @@ async def get_prescription(rid: str, u: dict = Depends(current_user)):
 
 @rxs.put("/{rid}")
 async def update_prescription(rid: str, data: PrescriptionUpdate, u: dict = Depends(current_user)):
+    safe_oid(rid, "ID de receta")
     upd = {k: v for k, v in data.model_dump().items() if v is not None}
     if "medications" in upd:
         upd["medications"] = [m.model_dump() if hasattr(m, "model_dump") else m for m in upd["medications"]]
@@ -495,12 +620,18 @@ class InvUpdate(BaseModel):
     notes: Optional[str] = None
 
 @inv.get("")
-async def list_inventory(search: Optional[str] = None, u: dict = Depends(current_user)):
+async def list_inventory(
+    search: Optional[str] = None,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(200, ge=1, le=1000),
+    u: dict = Depends(current_user)
+):
     q = {}
     if search:
-        q["$or"] = [{"name": {"$regex": search, "$options": "i"}},
-                    {"generic_name": {"$regex": search, "$options": "i"}}]
-    items = await db.inventory.find(q).sort("name", 1).to_list(1000)
+        escaped = safe_regex(search)
+        q["$or"] = [{"name": {"$regex": escaped, "$options": "i"}},
+                    {"generic_name": {"$regex": escaped, "$options": "i"}}]
+    items = await db.inventory.find(q).sort("name", 1).skip(skip).limit(limit).to_list(limit)
     return [s(i) for i in items]
 
 @inv.post("")
@@ -517,6 +648,7 @@ async def create_inv(data: InvCreate, u: dict = Depends(current_user)):
 async def update_inv(iid: str, data: InvUpdate, u: dict = Depends(current_user)):
     if u["role"] not in ["admin", "doctor"]:
         raise HTTPException(403, "Acceso denegado")
+    safe_oid(iid, "ID de inventario")
     upd = {k: v for k, v in data.model_dump().items() if v is not None}
     upd["updated_at"] = datetime.now(timezone.utc).isoformat()
     await db.inventory.update_one({"_id": ObjectId(iid)}, {"$set": upd})
@@ -526,6 +658,7 @@ async def update_inv(iid: str, data: InvUpdate, u: dict = Depends(current_user))
 async def delete_inv(iid: str, u: dict = Depends(current_user)):
     if u["role"] not in ["admin", "doctor"]:
         raise HTTPException(403, "Acceso denegado")
+    safe_oid(iid, "ID de inventario")
     await db.inventory.delete_one({"_id": ObjectId(iid)})
     return {"ok": True}
 
@@ -571,12 +704,13 @@ async def list_appts(date: Optional[str] = None, month: Optional[str] = None,
     if date:
         q["date"] = date
     elif month:
-        q["date"] = {"$regex": f"^{month}"}
+        q["date"] = {"$regex": f"^{safe_regex(month)}"}
     result = await db.appointments.find(q).sort([("date", 1), ("time", 1)]).to_list(500)
     return [s(r) for r in result]
 
 @appt.post("")
 async def create_appt(data: ApptCreate, u: dict = Depends(current_user)):
+    safe_oid(data.patient_id, "ID de paciente")
     p = await db.patients.find_one({"_id": ObjectId(data.patient_id)})
     if not p:
         raise HTTPException(404, "Paciente no encontrado")
@@ -592,14 +726,17 @@ async def create_appt(data: ApptCreate, u: dict = Depends(current_user)):
 
 @appt.get("/{aid}")
 async def get_appt(aid: str, u: dict = Depends(current_user)):
+    safe_oid(aid, "ID de cita")
     a = await db.appointments.find_one({"_id": ObjectId(aid)})
     if not a: raise HTTPException(404, "Cita no encontrada")
     return s(a)
 
 @appt.put("/{aid}")
 async def update_appt(aid: str, data: ApptUpdate, u: dict = Depends(current_user)):
+    safe_oid(aid, "ID de cita")
     upd = {k: v for k, v in data.model_dump().items() if v is not None}
     if "patient_id" in upd:
+        safe_oid(upd["patient_id"], "ID de paciente")
         p = await db.patients.find_one({"_id": ObjectId(upd["patient_id"])})
         if p: upd["patient_name"] = p["name"]
     if upd:
@@ -608,6 +745,13 @@ async def update_appt(aid: str, data: ApptUpdate, u: dict = Depends(current_user
 
 @appt.delete("/{aid}")
 async def delete_appt(aid: str, u: dict = Depends(current_user)):
+    safe_oid(aid, "ID de cita")
+    # Permission check: only admin or the doctor who created it
+    a = await db.appointments.find_one({"_id": ObjectId(aid)})
+    if not a:
+        raise HTTPException(404, "Cita no encontrada")
+    if u["role"] != "admin" and a.get("doctor_id") != u["id"]:
+        raise HTTPException(403, "Solo puedes eliminar tus propias citas o ser administrador")
     await db.appointments.delete_one({"_id": ObjectId(aid)})
     return {"ok": True}
 
@@ -698,77 +842,282 @@ async def get_logo():
     try:
         content, content_type = get_object(setting["clinic_logo_path"])
         return FastResponse(content=content, media_type=content_type,
-                            headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+                            headers={"Cache-Control": "public, max-age=3600"})
     except Exception as e:
         logger.error(f"Logo fetch failed: {e}")
         raise HTTPException(404, "Logo no disponible")
 
+
+# ===================== BACKUP SYSTEM =====================
+backup_r = APIRouter(prefix="/backup", tags=["backup"])
+
+BACKUP_VERSION = "1.0"
+BACKUP_COLLECTIONS = ["users", "patients", "prescriptions", "inventory", "appointments", "settings"]
+
+class BackupImportReq(BaseModel):
+    mode: str = "merge"  # "merge" or "replace"
+    confirmation: Optional[str] = None  # Must be "CONFIRMAR" for replace mode
+
+@backup_r.get("/info")
+async def backup_info(u: dict = Depends(current_user)):
+    """Get system statistics and last backup info for the backup UI."""
+    if u["role"] != "admin":
+        raise HTTPException(403, "Solo administradores pueden acceder a respaldos")
+    
+    counts = {}
+    for col_name in BACKUP_COLLECTIONS:
+        if col_name == "settings":
+            counts[col_name] = 1 if await db.settings.find_one({}) else 0
+        else:
+            counts[col_name] = await db[col_name].count_documents({})
+    
+    # Get last backup history
+    last_backup = await db.backup_history.find_one({}, sort=[("created_at", -1)])
+    history = await db.backup_history.find({}).sort("created_at", -1).to_list(10)
+    
+    return {
+        "counts": counts,
+        "last_backup": s(last_backup) if last_backup else None,
+        "history": [s(h) for h in history],
+        "total_records": sum(counts.values())
+    }
+
+@backup_r.post("/export")
+async def backup_export(u: dict = Depends(current_user)):
+    """Export all data as a downloadable ZIP file containing JSON."""
+    if u["role"] != "admin":
+        raise HTTPException(403, "Solo administradores pueden exportar respaldos")
+    
+    now = datetime.now(timezone.utc)
+    
+    # Collect all data
+    export_data = {
+        "meta": {
+            "version": BACKUP_VERSION,
+            "app": "ClinicFlow",
+            "exported_at": now.isoformat(),
+            "exported_by": u["name"],
+            "exported_by_email": u.get("email", ""),
+        },
+        "data": {}
+    }
+    
+    total_records = 0
+    for col_name in BACKUP_COLLECTIONS:
+        if col_name == "settings":
+            doc = await db.settings.find_one({})
+            if doc:
+                doc = s(doc)
+                export_data["data"][col_name] = [doc]
+                total_records += 1
+            else:
+                export_data["data"][col_name] = []
+        elif col_name == "users":
+            # Exclude password_hash for security
+            docs = await db.users.find({}, {"password_hash": 0}).to_list(10000)
+            export_data["data"][col_name] = [s(d) for d in docs]
+            total_records += len(docs)
+        else:
+            docs = await db[col_name].find({}).to_list(50000)
+            export_data["data"][col_name] = [s(d) for d in docs]
+            total_records += len(docs)
+    
+    export_data["meta"]["total_records"] = total_records
+    
+    # Get clinic name for filename
+    settings_doc = await db.settings.find_one({})
+    clinic_name = (settings_doc or {}).get("clinic_name", "ClinicFlow")
+    safe_name = re.sub(r'[^\w\s-]', '', clinic_name).strip().replace(' ', '_')
+    
+    # Create ZIP in memory
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+        json_content = json.dumps(export_data, ensure_ascii=False, indent=2, default=str)
+        zf.writestr("backup.json", json_content)
+    
+    zip_buffer.seek(0)
+    
+    # Record in backup history
+    await db.backup_history.insert_one({
+        "type": "export",
+        "records": total_records,
+        "collections": {k: len(v) for k, v in export_data["data"].items()},
+        "exported_by": u["name"],
+        "exported_by_id": u["id"],
+        "created_at": now.isoformat(),
+        "filename": f"{safe_name}_respaldo_{now.strftime('%Y%m%d_%H%M%S')}.zip"
+    })
+    
+    filename = f"{safe_name}_respaldo_{now.strftime('%Y%m%d_%H%M%S')}.zip"
+    
+    return StreamingResponse(
+        zip_buffer,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Access-Control-Expose-Headers": "Content-Disposition"
+        }
+    )
+
+@backup_r.post("/import")
+async def backup_import(
+    file: UploadFile = File(...),
+    mode: str = Form("merge"),
+    confirmation: str = Form(""),
+    u: dict = Depends(current_user)
+):
+    """Import data from a ZIP backup file."""
+    if u["role"] != "admin":
+        raise HTTPException(403, "Solo administradores pueden importar respaldos")
+    
+    # Validate mode
+    if mode not in ("merge", "replace"):
+        raise HTTPException(400, "Modo inválido. Use 'merge' o 'replace'.")
+    
+    # For replace mode, require "CONFIRMAR" confirmation
+    if mode == "replace" and confirmation != "CONFIRMAR":
+        raise HTTPException(
+            400, 
+            "Para el modo 'replace' debe enviar confirmation='CONFIRMAR'. "
+            "Este modo eliminará TODOS los datos existentes."
+        )
+    
+    # Read and validate ZIP
+    raw = await file.read()
+    if len(raw) > 50 * 1024 * 1024:  # 50MB max
+        raise HTTPException(400, "El archivo no puede superar 50MB")
+    
+    try:
+        zip_buffer = io.BytesIO(raw)
+        with zipfile.ZipFile(zip_buffer, 'r') as zf:
+            if "backup.json" not in zf.namelist():
+                raise HTTPException(400, "Archivo ZIP inválido: no contiene backup.json")
+            json_content = zf.read("backup.json").decode("utf-8")
+    except zipfile.BadZipFile:
+        raise HTTPException(400, "El archivo no es un ZIP válido")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(400, f"Error al leer el archivo: {str(e)}")
+    
+    # Parse JSON
+    try:
+        import_data = json.loads(json_content)
+    except json.JSONDecodeError:
+        raise HTTPException(400, "El archivo backup.json no es JSON válido")
+    
+    # Validate structure
+    if "meta" not in import_data or "data" not in import_data:
+        raise HTTPException(400, "Formato de respaldo inválido: faltan campos 'meta' y/o 'data'")
+    
+    if import_data["meta"].get("app") != "ClinicFlow":
+        raise HTTPException(400, "Este respaldo no pertenece a ClinicFlow")
+    
+    now = datetime.now(timezone.utc)
+    summary = {"mode": mode, "imported": {}, "skipped": {}, "errors": []}
+    
+    if mode == "replace":
+        # Drop all data from collections (except backup_history)
+        for col_name in BACKUP_COLLECTIONS:
+            if col_name in import_data["data"]:
+                await db[col_name].delete_many({})
+    
+    data = import_data["data"]
+    
+    for col_name in BACKUP_COLLECTIONS:
+        if col_name not in data:
+            continue
+        
+        records = data[col_name]
+        if not isinstance(records, list):
+            summary["errors"].append(f"'{col_name}' no es una lista válida")
+            continue
+        
+        imported_count = 0
+        skipped_count = 0
+        
+        for record in records:
+            if not isinstance(record, dict):
+                continue
+            
+            # Remove the export "id" field — MongoDB will assign new _id
+            record.pop("id", None)
+            record.pop("_id", None)
+            
+            if col_name == "settings":
+                # Settings: upsert (always replace)
+                record["imported_at"] = now.isoformat()
+                await db.settings.update_one({}, {"$set": record}, upsert=True)
+                imported_count += 1
+                
+            elif col_name == "users":
+                email = record.get("email", "").lower().strip()
+                if not email:
+                    skipped_count += 1
+                    continue
+                
+                if mode == "merge":
+                    # Skip if user with same email exists
+                    existing = await db.users.find_one({"email": email})
+                    if existing:
+                        skipped_count += 1
+                        continue
+                
+                # Generate a temporary password for imported users
+                record["email"] = email
+                record["password_hash"] = hash_pw("Temporal123!")
+                record["imported_at"] = now.isoformat()
+                record.setdefault("role", "doctor")
+                record.setdefault("created_at", now.isoformat())
+                
+                try:
+                    await db.users.insert_one(record)
+                    imported_count += 1
+                except Exception:
+                    skipped_count += 1  # Likely duplicate key
+                    
+            else:
+                # For other collections in merge mode, just insert (no dedup logic)
+                record["imported_at"] = now.isoformat()
+                record.setdefault("created_at", now.isoformat())
+                try:
+                    await db[col_name].insert_one(record)
+                    imported_count += 1
+                except Exception as e:
+                    summary["errors"].append(f"Error en '{col_name}': {str(e)}")
+                    skipped_count += 1
+        
+        summary["imported"][col_name] = imported_count
+        summary["skipped"][col_name] = skipped_count
+    
+    # Record in backup history
+    await db.backup_history.insert_one({
+        "type": "import",
+        "mode": mode,
+        "summary": summary,
+        "imported_by": u["name"],
+        "imported_by_id": u["id"],
+        "source_exported_at": import_data["meta"].get("exported_at", ""),
+        "source_exported_by": import_data["meta"].get("exported_by", ""),
+        "created_at": now.isoformat()
+    })
+    
+    return {
+        "ok": True,
+        "summary": summary,
+        "message": f"Importación completada en modo '{mode}'."
+    }
+
+@backup_r.get("/history")
+async def backup_history_list(u: dict = Depends(current_user)):
+    """Get backup history records."""
+    if u["role"] != "admin":
+        raise HTTPException(403, "Solo administradores pueden ver el historial de respaldos")
+    history = await db.backup_history.find({}).sort("created_at", -1).to_list(50)
+    return [s(h) for h in history]
+
+
 # ===================== ASSEMBLE =====================
-for router in [auth, users_r, pts, rxs, inv, dash, cfg, upload_r, appt]:
+for router in [auth, users_r, pts, rxs, inv, dash, cfg, upload_r, appt, backup_r]:
     api.include_router(router)
 app.include_router(api)
-
-@app.on_event("startup")
-async def startup():
-    await db.users.create_index("email", unique=True)
-    await db.patients.create_index([("name", 1)])
-    await db.prescriptions.create_index([("patient_id", 1)])
-    await db.inventory.create_index([("name", 1)])
-    await db.appointments.create_index([("date", 1), ("doctor_id", 1)])
-
-    try:
-        init_storage()
-        logger.info("Object storage initialized")
-    except Exception as e:
-        logger.warning(f"Storage init failed (non-fatal): {e}")
-
-    admin_email = os.environ.get("ADMIN_EMAIL", "admin@medconsulta.com")
-    admin_pw = os.environ.get("ADMIN_PASSWORD", "Admin123!")
-    existing = await db.users.find_one({"email": admin_email})
-    if not existing:
-        await db.users.insert_one({
-            "name": "Administrador", "email": admin_email,
-            "password_hash": hash_pw(admin_pw), "role": "admin",
-            "specialization": "Administración del Sistema",
-            "created_at": datetime.now(timezone.utc).isoformat()
-        })
-        logger.info(f"Admin user created: {admin_email}")
-    elif not verify_pw(admin_pw, existing["password_hash"]):
-        await db.users.update_one({"email": admin_email},
-                                   {"$set": {"password_hash": hash_pw(admin_pw)}})
-
-    creds = Path("/app/memory/test_credentials.md")
-    try:
-        creds.parent.mkdir(parents=True, exist_ok=True)
-        creds.write_text(f"""# Test Credentials
-
-## Admin Account
-- Email: {admin_email}
-- Password: {admin_pw}
-- Role: admin
-
-## API Endpoints
-- POST /api/auth/login
-- GET /api/auth/me
-- POST /api/auth/logout
-- GET /api/patients
-- POST /api/patients
-- GET /api/prescriptions
-- POST /api/prescriptions
-- GET /api/inventory
-- POST /api/inventory
-- GET /api/appointments?date=YYYY-MM-DD or ?month=YYYY-MM
-- POST /api/appointments
-- PUT /api/appointments/{{id}}
-- DELETE /api/appointments/{{id}}
-- GET /api/dashboard/stats
-- GET /api/users (admin only)
-""")
-    except Exception as e:
-        logger.warning(f"Could not write test_credentials.md (non-fatal): {e}")
-
-    logger.info("Startup complete")
-
-@app.on_event("shutdown")
-async def shutdown():
-    client.close()

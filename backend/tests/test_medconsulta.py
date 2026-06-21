@@ -485,9 +485,106 @@ class TestDispensing:
         print("PASS: dispensing cleanup done")
 
 
+
+class TestBackup:
+    """Tests for the backup and recovery system"""
+
+    def test_backup_info(self):
+        resp = session.get(f"{BASE_URL}/api/backup/info")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "counts" in data
+        assert "last_backup" in data
+        assert "history" in data
+        assert "total_records" in data
+        print("PASS: backup info retrieved successfully")
+
+    def test_backup_export(self):
+        resp = session.post(f"{BASE_URL}/api/backup/export")
+        assert resp.status_code == 200
+        assert resp.headers.get("Content-Type") == "application/zip"
+        
+        # Verify it's a valid ZIP and contains backup.json
+        import io, zipfile, json
+        zip_file = zipfile.ZipFile(io.BytesIO(resp.content))
+        assert "backup.json" in zip_file.namelist()
+        
+        backup_content = json.loads(zip_file.read("backup.json").decode("utf-8"))
+        assert backup_content["meta"]["app"] == "ClinicFlow"
+        assert "data" in backup_content
+        print("PASS: backup exported successfully and verified zip content")
+
+    def test_backup_import_validation(self):
+        # Invalid mode
+        resp = session.post(f"{BASE_URL}/api/backup/import", files={"file": ("dummy.zip", b"dummy content")}, data={"mode": "invalid_mode"}, headers={"Content-Type": None})
+        assert resp.status_code == 400
+        
+        # Replace mode without confirmation
+        resp = session.post(f"{BASE_URL}/api/backup/import", files={"file": ("dummy.zip", b"dummy content")}, data={"mode": "replace"}, headers={"Content-Type": None})
+        assert resp.status_code == 400
+        assert "confirmation='CONFIRMAR'" in resp.json()["detail"]
+
+        # Invalid ZIP format
+        resp = session.post(f"{BASE_URL}/api/backup/import", files={"file": ("dummy.zip", b"not a zip file")}, data={"mode": "merge"}, headers={"Content-Type": None})
+        assert resp.status_code == 400
+        assert "zip" in resp.json()["detail"].lower()
+        print("PASS: backup import validation checks verified")
+
+    def test_backup_import_merge_and_replace(self):
+        import io, zipfile, json
+        
+        # 1. Export current state
+        export_resp = session.post(f"{BASE_URL}/api/backup/export")
+        assert export_resp.status_code == 200
+        backup_bytes = export_resp.content
+
+        # 2. Try merging back the exact same backup (should skip duplicates or merge cleanly)
+        import_resp = session.post(
+            f"{BASE_URL}/api/backup/import",
+            files={"file": ("backup.zip", backup_bytes)},
+            data={"mode": "merge"},
+            headers={"Content-Type": None}
+        )
+        assert import_resp.status_code == 200
+        data = import_resp.json()
+        assert data["ok"] is True
+        assert "summary" in data
+        print("PASS: backup merge completed successfully")
+
+        # 3. Try replacing with confirmation (should succeed and rebuild state)
+        import_resp_replace = session.post(
+            f"{BASE_URL}/api/backup/import",
+            files={"file": ("backup.zip", backup_bytes)},
+            data={"mode": "replace", "confirmation": "CONFIRMAR"},
+            headers={"Content-Type": None}
+        )
+        assert import_resp_replace.status_code == 200
+        data_replace = import_resp_replace.json()
+        assert data_replace["ok"] is True
+        print("PASS: backup replace with CONFIRMAR completed successfully")
+
+        # 4. Re-authenticate since replace mode drops collections and re-imports users with a temporary password
+        login_resp = session.post(
+            f"{BASE_URL}/api/auth/login",
+            json={"email": ADMIN_EMAIL, "password": "Temporal123!"}
+        )
+        assert login_resp.status_code == 200
+        print("PASS: successfully re-authenticated after replace restore")
+
+    def test_backup_history(self):
+        resp = session.get(f"{BASE_URL}/api/backup/history")
+        assert resp.status_code == 200
+        history = resp.json()
+        assert isinstance(history, list)
+        assert len(history) >= 2  # The export and imports we just performed
+        assert any(item["type"] == "export" for item in history)
+        assert any(item["type"] == "import" for item in history)
+        print("PASS: backup history verified")
+
+
 class TestCleanup:
     def test_cleanup(self):
-        """Delete test data"""
+        """Delete test data and restore admin password"""
 
         if created_inventory_id:
             session.delete(f"{BASE_URL}/api/inventory/{created_inventory_id}")
@@ -495,4 +592,36 @@ class TestCleanup:
             session.delete(f"{BASE_URL}/api/patients/{created_patient_id}")
         if created_user_id:
             session.delete(f"{BASE_URL}/api/users/{created_user_id}")
+            
+        # Re-authenticate in case session is expired
+        try:
+            session.post(f"{BASE_URL}/api/auth/login", json={"email": ADMIN_EMAIL, "password": "Temporal123!"})
+        except Exception:
+            pass
+
+        # Restore admin password in database
+        import dotenv
+        import os
+        import pymongo
+        import bcrypt
+        
+        dotenv_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env')
+        dotenv.load_dotenv(dotenv_file)
+        
+        mongo_url = os.environ.get("MONGO_URL")
+        db_name = os.environ.get("DB_NAME", "medconsulta")
+        
+        if mongo_url:
+            try:
+                client = pymongo.MongoClient(mongo_url)
+                db = client[db_name]
+                hashed = bcrypt.hashpw(ADMIN_PASSWORD.encode(), bcrypt.gensalt()).decode()
+                db.users.update_one(
+                    {"email": ADMIN_EMAIL.lower().strip()},
+                    {"$set": {"password_hash": hashed}}
+                )
+                print("PASS: restored admin password successfully in database")
+            except Exception as e:
+                print(f"WARNING: failed to restore admin password: {e}")
+        
         print("PASS: cleanup done")
