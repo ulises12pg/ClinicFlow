@@ -113,26 +113,44 @@ def make_refresh_token(uid: str) -> str:
         _secret(), algorithm=JWT_ALG)
 
 async def current_user(request: Request) -> dict:
-    token = request.cookies.get("access_token")
+    token = None
+    payload = None
+    
+    # 1. Try cookie
+    cookie_token = request.cookies.get("access_token")
+    if cookie_token:
+        try:
+            p = jwt.decode(cookie_token, _secret(), algorithms=[JWT_ALG])
+            if p.get("type") == "access":
+                token = cookie_token
+                payload = p
+        except Exception:
+            pass
+            
+    # 2. Try Authorization header if cookie failed
     if not token:
         h = request.headers.get("Authorization", "")
-        if h.startswith("Bearer "): token = h[7:]
-    if not token:
+        if h.startswith("Bearer "):
+            header_token = h[7:]
+            try:
+                p = jwt.decode(header_token, _secret(), algorithms=[JWT_ALG])
+                if p.get("type") == "access":
+                    token = header_token
+                    payload = p
+            except jwt.ExpiredSignatureError:
+                raise HTTPException(401, "Sesión expirada")
+            except jwt.InvalidTokenError:
+                raise HTTPException(401, "Token inválido")
+                
+    if not token or not payload:
         raise HTTPException(401, "No autenticado")
-    try:
-        p = jwt.decode(token, _secret(), algorithms=[JWT_ALG])
-        if p.get("type") != "access":
-            raise HTTPException(401, "Token inválido")
-        u = await db.users.find_one({"_id": ObjectId(p["sub"])})
-        if not u:
-            raise HTTPException(401, "Usuario no encontrado")
-        u["id"] = str(u.pop("_id"))
-        u.pop("password_hash", None)
-        return u
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(401, "Sesión expirada")
-    except jwt.InvalidTokenError:
-        raise HTTPException(401, "Token inválido")
+        
+    u = await db.users.find_one({"_id": ObjectId(payload["sub"])})
+    if not u:
+        raise HTTPException(401, "Usuario no encontrado")
+    u["id"] = str(u.pop("_id"))
+    u.pop("password_hash", None)
+    return u
 
 def s(doc: dict) -> dict:
     doc = dict(doc)
