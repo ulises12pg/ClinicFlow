@@ -3,6 +3,20 @@ import axios from "axios";
 
 const AuthContext = createContext(null);
 
+// Axios interceptor to append Authorization Bearer token from localStorage for fallback
+axios.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem("access_token");
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
 export const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 export function AuthProvider({ children }) {
@@ -18,6 +32,7 @@ export function AuthProvider({ children }) {
       const { data } = await axios.get(`${API}/auth/me`, { withCredentials: true });
       setUser(data);
     } catch {
+      localStorage.removeItem("access_token");
       setUser(null);
     } finally {
       setLoading(false);
@@ -26,12 +41,16 @@ export function AuthProvider({ children }) {
 
   const login = async (email, password) => {
     const { data } = await axios.post(`${API}/auth/login`, { email, password }, { withCredentials: true });
+    if (data.access_token) {
+      localStorage.setItem("access_token", data.access_token);
+    }
     setUser(data);
     return data;
   };
 
   const logout = async () => {
     await axios.post(`${API}/auth/logout`, {}, { withCredentials: true });
+    localStorage.removeItem("access_token");
     setUser(null);
   };
 

@@ -176,12 +176,15 @@ async def login(req: LoginReq, resp: Response):
     if not u or not verify_pw(req.password, u["password_hash"]):
         raise HTTPException(401, "Credenciales incorrectas")
     uid = str(u["_id"])
-    resp.set_cookie("access_token", make_access_token(uid, u["email"]),
+    at = make_access_token(uid, u["email"])
+    rt = make_refresh_token(uid)
+    resp.set_cookie("access_token", at,
                     httponly=True, secure=COOKIE_SECURE, samesite="none", max_age=28800, path="/")
-    resp.set_cookie("refresh_token", make_refresh_token(uid),
+    resp.set_cookie("refresh_token", rt,
                     httponly=True, secure=COOKIE_SECURE, samesite="none", max_age=604800, path="/")
     return {"id": uid, "name": u["name"], "email": u["email"],
-            "role": u["role"], "specialization": u.get("specialization")}
+            "role": u["role"], "specialization": u.get("specialization"),
+            "access_token": at, "refresh_token": rt}
 
 @auth.post("/logout")
 async def logout(resp: Response):
@@ -207,7 +210,7 @@ async def refresh(request: Request, resp: Response):
             raise HTTPException(401, "Usuario no encontrado")
         at = make_access_token(str(u["_id"]), u["email"])
         resp.set_cookie("access_token", at, httponly=True, secure=COOKIE_SECURE, samesite="none", max_age=28800, path="/")
-        return {"ok": True}
+        return {"ok": True, "access_token": at}
     except jwt.InvalidTokenError:
         raise HTTPException(401, "Token inválido")
 
