@@ -13,7 +13,6 @@ Sistema de gestión integral para consultorio médico familiar. Permite expedir 
 - 💊 **Recetas médicas** dinámicas con impresión / PDF y membrete personalizable
 - 📦 **Inventario de medicamentos** con alertas de stock bajo y caducidad
 - 📅 **Agenda / Citas médicas** con calendario mensual, vista por día, tipos y estados
-- ✉️ **Recordatorios por email** automáticos (cron 8 PM diario) + envío manual con un clic
 - ⚙️ **Configuración del consultorio** con subida directa de logo (drag & drop)
 - 🌓 **Modo Claro / Oscuro** con persistencia
 - 📱 **Responsive** desktop + mobile, interfaz 100% en español
@@ -25,8 +24,7 @@ Sistema de gestión integral para consultorio médico familiar. Permite expedir 
 **Backend**
 - [FastAPI](https://fastapi.tiangolo.com/) (Python 3.11+)
 - [MongoDB](https://www.mongodb.com/) con [Motor](https://motor.readthedocs.io/) (async driver)
-- [APScheduler](https://apscheduler.readthedocs.io/) para tareas programadas
-- [Resend](https://resend.com) para emails transaccionales
+
 - JWT (PyJWT) + bcrypt para autenticación
 
 **Frontend**
@@ -95,12 +93,6 @@ ADMIN_EMAIL="admin@medconsulta.com"
 ADMIN_PASSWORD="Admin123!"
 FRONTEND_URL="http://localhost:3000"
 
-# Resend (email reminders) — opcional, los recordatorios no enviarán sin esto
-RESEND_API_KEY="re_tu_api_key"
-SENDER_EMAIL="onboarding@resend.dev"
-SENDER_NAME="Consultorio Médico"
-REMINDER_HOUR="20"
-TIMEZONE="America/Mexico_City"
 
 # Object Storage (logos) — opcional, requiere clave de Emergent
 EMERGENT_LLM_KEY=""
@@ -150,11 +142,7 @@ Abre [http://localhost:3000](http://localhost:3000) y entra con:
 | `JWT_SECRET` | Secreto JWT (genera uno único) | `openssl rand -hex 32` |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Bootstrap del admin | `admin@medconsulta.com` / `Admin123!` |
 | `FRONTEND_URL` | URL del frontend (para cookies seguras) | `http://localhost:3000` |
-| `RESEND_API_KEY` | API key de [Resend](https://resend.com) | `re_xxx` |
-| `SENDER_EMAIL` | Remitente de los emails | `onboarding@resend.dev` |
-| `SENDER_NAME` | Nombre que aparece como remitente | `Consultorio Médico` |
-| `REMINDER_HOUR` | Hora del cron diario (0–23) | `20` |
-| `TIMEZONE` | Zona horaria del cron | `America/Mexico_City` |
+
 | `EMERGENT_LLM_KEY` | Para Object Storage de logos (opcional) | `sk-emergent-xxx` |
 
 ### Frontend (`frontend/.env`)
@@ -177,8 +165,7 @@ Abre [http://localhost:3000](http://localhost:3000) y entra con:
 | GET/POST/PUT/DELETE | `/api/prescriptions[/{id}]` | CRUD de recetas |
 | GET/POST/PUT/DELETE | `/api/inventory[/{id}]` | CRUD de inventario |
 | GET/POST/PUT/DELETE | `/api/appointments[/{id}]` | CRUD de citas (filtros: `?date=YYYY-MM-DD` o `?month=YYYY-MM`) |
-| POST | `/api/appointments/{id}/send-reminder` | Enviar recordatorio manual |
-| POST | `/api/appointments/run-daily-reminders-now` | Ejecutar el cron ahora (admin) |
+
 | GET/POST | `/api/settings` | Configuración del consultorio |
 | POST | `/api/upload/logo` | Subir logo |
 | GET | `/api/logo` | Servir el logo |
@@ -187,14 +174,7 @@ Abre [http://localhost:3000](http://localhost:3000) y entra con:
 
 Documentación interactiva (Swagger): `http://localhost:8001/docs`
 
----
 
-## ✉️ Configurar Resend (recordatorios por email)
-
-1. Crea cuenta gratis en [resend.com](https://resend.com) (3,000 emails/mes en plan free).
-2. **Settings → API Keys → Create API Key** → copia la key (`re_...`) y pégala en `RESEND_API_KEY`.
-3. **Modo sandbox**: por defecto solo puedes enviar emails a la dirección con la que registraste tu cuenta de Resend. Para enviar a cualquier paciente debes verificar un dominio propio en **Settings → Domains**.
-4. Una vez verificado tu dominio, cambia `SENDER_EMAIL` en `.env` (ej. `citas@miconsultorio.com`).
 
 ---
 
@@ -216,11 +196,6 @@ pytest tests/ -v
 **Las cookies no se guardan en producción**
 > Si tu frontend está en HTTPS, las cookies se marcan automáticamente como `Secure`. Asegúrate de que `FRONTEND_URL` empiece con `https://` en producción.
 
-**Los emails no llegan**
-> 1) Revisa que `RESEND_API_KEY` esté configurada. 2) En sandbox solo se envía al email del owner de la cuenta Resend. 3) Revisa la carpeta de spam.
-
-**El cron no se dispara a la hora esperada**
-> Verifica `REMINDER_HOUR` y `TIMEZONE` en `.env`. El scheduler usa la zona horaria configurada (default: `America/Mexico_City`).
 
 ---
 

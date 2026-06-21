@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { es } from "date-fns/locale";
 import {
   Plus, Clock, User, Calendar as CalIcon, FileText, Edit2, Trash2,
-  CheckCheck, Search, ChevronRight, Mail, MailCheck
+  CheckCheck, Search, ChevronRight
 } from "lucide-react";
 
 // ── Constants ──────────────────────────────────────────

@@ -291,102 +291,6 @@ class TestAppointments:
         print("PASS: appointment deleted")
 
 
-# ============= REMINDERS (Resend / APScheduler) =============
-EXISTING_APPT_ID = "69fceeb321544b79331be169"  # Antonieta, 2026-05-07 10:30, has email
-
-# Will hold an appointment id created for the no-email patient
-no_email_appt_id = None
-
-
-class TestReminders:
-    """Tests for POST /api/appointments/{id}/send-reminder and run-daily-reminders-now"""
-
-    def test_send_reminder_unauth_returns_401(self):
-        s2 = requests.Session()
-        resp = s2.post(f"{BASE_URL}/api/appointments/{EXISTING_APPT_ID}/send-reminder")
-        assert resp.status_code == 401
-        print("PASS: send-reminder requires auth")
-
-    def test_send_reminder_invalid_id_returns_404(self):
-        # 24-hex but non-existent
-        resp = session.post(f"{BASE_URL}/api/appointments/000000000000000000000000/send-reminder")
-        assert resp.status_code == 404
-        print("PASS: send-reminder invalid id returns 404")
-
-    def test_send_reminder_patient_without_email_returns_400(self):
-        """Create an appt for the patient (no email) and expect 400, no Resend call."""
-        global no_email_appt_id
-        assert created_patient_id, "TEST_Juan Garcia patient must exist"
-        # Confirm patient has no email
-        p = session.get(f"{BASE_URL}/api/patients/{created_patient_id}").json()
-        assert not (p.get("email") or "").strip(), "Test patient should have no email"
-
-        resp = session.post(f"{BASE_URL}/api/appointments", json={
-            "patient_id": created_patient_id,
-            "date": "2026-06-10", "time": "10:00",
-            "duration": 30, "type": "consulta",
-            "notes": "TEST no-email reminder"
-        })
-        assert resp.status_code == 200
-        no_email_appt_id = resp.json()["id"]
-
-        rr = session.post(f"{BASE_URL}/api/appointments/{no_email_appt_id}/send-reminder")
-        assert rr.status_code == 400
-        body = rr.json()
-        # FastAPI default error shape: {"detail": "..."}
-        msg = body.get("detail") or body.get("message") or ""
-        assert "email" in msg.lower(), f"Expected email-related error, got: {body}"
-        print(f"PASS: send-reminder no-email -> 400: {msg}")
-
-    def test_persistence_fields_in_list_for_existing_appt(self):
-        """Antonieta's appt was sent manually via curl. Verify the appointment list
-        exposes the new email_reminder_* fields and never returns _id."""
-        resp = session.get(f"{BASE_URL}/api/appointments?date=2026-05-07")
-        assert resp.status_code == 200
-        items = resp.json()
-        target = next((a for a in items if a["id"] == EXISTING_APPT_ID), None)
-        if target is None:
-            pytest.skip("Existing reference appointment not present in this environment")
-        assert "_id" not in target
-        # Fields should exist (booleans/strings or absent if never sent). When sent
-        # they must be present:
-        if target.get("email_reminder_sent") is True:
-            assert target.get("email_reminder_sent_at"), "email_reminder_sent_at must exist"
-            assert target.get("email_reminder_to"), "email_reminder_to must exist"
-            assert "email_reminder_id" in target, "email_reminder_id key must exist"
-            print(f"PASS: existing appt has reminder fields persisted: to={target.get('email_reminder_to')}")
-        else:
-            print("INFO: existing appt has not been sent yet; skipping persistence check")
-
-    def test_run_daily_reminders_non_admin_returns_403(self):
-        """Login as the doctor created earlier and verify 403."""
-        if not created_user_id:
-            pytest.skip("doctor user not created")
-        s_doc = requests.Session()
-        s_doc.headers.update({"Content-Type": "application/json"})
-        login = s_doc.post(f"{BASE_URL}/api/auth/login", json={
-            "email": "test_dr_lopez@medconsulta.com",
-            "password": "Doctor123!"
-        })
-        assert login.status_code == 200, f"doctor login failed: {login.text}"
-        resp = s_doc.post(f"{BASE_URL}/api/appointments/run-daily-reminders-now")
-        assert resp.status_code == 403, f"Expected 403, got {resp.status_code}: {resp.text}"
-        print("PASS: run-daily-reminders-now requires admin (403 for doctor)")
-
-    def test_run_daily_reminders_admin_returns_summary(self):
-        """Admin call returns {date, sent, skipped, failed} structure."""
-        resp = session.post(f"{BASE_URL}/api/appointments/run-daily-reminders-now")
-        assert resp.status_code == 200, resp.text
-        data = resp.json()
-        for k in ("date", "sent", "skipped", "failed"):
-            assert k in data, f"missing key {k} in {data}"
-        # date must look like YYYY-MM-DD (tomorrow)
-        assert len(data["date"]) == 10 and data["date"][4] == "-" and data["date"][7] == "-"
-        assert isinstance(data["sent"], int)
-        assert isinstance(data["skipped"], int)
-        assert isinstance(data["failed"], int)
-        print(f"PASS: run-daily-reminders-now -> {data}")
-
 
 # ============= DISPENSING / Prescription -> Inventory link =============
 disp_inv_a = None  # high stock
@@ -584,9 +488,7 @@ class TestDispensing:
 class TestCleanup:
     def test_cleanup(self):
         """Delete test data"""
-        # Delete the no-email reminder appt first
-        if no_email_appt_id:
-            session.delete(f"{BASE_URL}/api/appointments/{no_email_appt_id}")
+
         if created_inventory_id:
             session.delete(f"{BASE_URL}/api/inventory/{created_inventory_id}")
         if created_patient_id:
