@@ -165,7 +165,7 @@ export default function Patients() {
                 {patients.map(p => (
                   <tr
                     key={p.id}
-                    className="border-b border-slate-50 hover:bg-slate-50 cursor-pointer transition-colors"
+                    className="border-b border-slate-50 hover:bg-slate-50/80 active:bg-slate-100/50 cursor-pointer transition-all duration-100"
                     onClick={() => navigate(`/pacientes/${p.id}`)}
                     data-testid={`patient-row-${p.id}`}
                   >
@@ -180,10 +180,10 @@ export default function Patients() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3.5 text-slate-600 hidden sm:table-cell">
+                    <td className="px-4 py-3.5 text-slate-600 hidden sm:table-cell tabular-nums">
                       {p.date_of_birth ? `${calcAge(p.date_of_birth)} años` : "—"}
                     </td>
-                    <td className="px-4 py-3.5 text-slate-600 hidden md:table-cell">
+                    <td className="px-4 py-3.5 text-slate-600 hidden md:table-cell tabular-nums">
                       {p.phone ? (
                         <span className="flex items-center gap-1"><Phone size={12} />{p.phone}</span>
                       ) : "—"}
