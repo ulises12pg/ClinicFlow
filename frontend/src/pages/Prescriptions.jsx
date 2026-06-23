@@ -32,7 +32,7 @@ export default function Prescriptions() {
   const handleDeleteConfirm = async () => {
     if (!deleteId) return;
     try {
-      await axios.delete(`${API}/prescriptions/${deleteId}`, { withCredentials: true });
+      await axios.post(`${API}/prescriptions/${deleteId}/delete`, {}, { withCredentials: true });
       fetch();
     } catch (e) {
       console.error(e);

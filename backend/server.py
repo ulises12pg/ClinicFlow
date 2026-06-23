@@ -401,6 +401,10 @@ async def delete_user(uid: str, u: dict = Depends(current_user)):
     await db.users.delete_one({"_id": ObjectId(uid)})
     return {"ok": True}
 
+@users_r.post("/{uid}/delete")
+async def delete_user_fallback(uid: str, u: dict = Depends(current_user)):
+    return await delete_user(uid, u)
+
 # ===================== PATIENTS =====================
 pts = APIRouter(prefix="/patients", tags=["patients"])
 
@@ -476,6 +480,10 @@ async def delete_patient(pid: str, u: dict = Depends(current_user)):
     safe_oid(pid, "ID de paciente")
     await db.patients.delete_one({"_id": ObjectId(pid)})
     return {"ok": True}
+
+@pts.post("/{pid}/delete")
+async def delete_patient_fallback(pid: str, u: dict = Depends(current_user)):
+    return await delete_patient(pid, u)
 
 # ===================== PRESCRIPTIONS =====================
 rxs = APIRouter(prefix="/prescriptions", tags=["prescriptions"])
@@ -605,6 +613,10 @@ async def delete_prescription(rid: str, u: dict = Depends(current_user)):
     await db.prescriptions.delete_one({"_id": ObjectId(rid)})
     return {"ok": True}
 
+@rxs.post("/{rid}/delete")
+async def delete_prescription_fallback(rid: str, u: dict = Depends(current_user)):
+    return await delete_prescription(rid, u)
+
 # ===================== INVENTORY =====================
 inv = APIRouter(prefix="/inventory", tags=["inventory"])
 
@@ -672,6 +684,10 @@ async def delete_inv(iid: str, u: dict = Depends(current_user)):
     safe_oid(iid, "ID de inventario")
     await db.inventory.delete_one({"_id": ObjectId(iid)})
     return {"ok": True}
+
+@inv.post("/{iid}/delete")
+async def delete_inv_fallback(iid: str, u: dict = Depends(current_user)):
+    return await delete_inv(iid, u)
 
 # ===================== DASHBOARD =====================
 dash = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -790,6 +806,10 @@ async def delete_appt(aid: str, u: dict = Depends(current_user)):
         raise HTTPException(403, "Solo puedes eliminar tus propias citas o ser administrador")
     await db.appointments.delete_one({"_id": ObjectId(aid)})
     return {"ok": True}
+
+@appt.post("/{aid}/delete")
+async def delete_appt_fallback(aid: str, u: dict = Depends(current_user)):
+    return await delete_appt(aid, u)
 
 
 # ===================== SETTINGS =====================

@@ -63,7 +63,7 @@ export default function Users() {
   const handleDeleteConfirm = async () => {
     if (!deleteId) return;
     try {
-      await axios.delete(`${API}/users/${deleteId}`, { withCredentials: true });
+      await axios.post(`${API}/users/${deleteId}/delete`, {}, { withCredentials: true });
       fetchUsers();
     } catch (err) {
       alert(err.response?.data?.detail || "Error al eliminar");

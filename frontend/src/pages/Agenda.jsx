@@ -170,7 +170,7 @@ export default function Agenda() {
   const handleDeleteConfirm = async () => {
     if (!deleteId) return;
     try {
-      await axios.delete(`${API}/appointments/${deleteId}`, { withCredentials: true });
+      await axios.post(`${API}/appointments/${deleteId}/delete`, {}, { withCredentials: true });
       fetchMonth(toMonthStr(calMonth));
       fetchDay(toDateStr(selected));
     } catch (e) {

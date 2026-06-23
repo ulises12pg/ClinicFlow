@@ -85,7 +85,7 @@ export default function Inventory() {
   const handleDeleteConfirm = async () => {
     if (!deleteId) return;
     try {
-      await axios.delete(`${API}/inventory/${deleteId}`, { withCredentials: true });
+      await axios.post(`${API}/inventory/${deleteId}/delete`, {}, { withCredentials: true });
       fetchItems();
     } catch (e) {
       console.error(e);

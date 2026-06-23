@@ -80,13 +80,14 @@ export default function Patients() {
   const handleDeleteConfirm = async () => {
     if (!deleteId) return;
     try {
-      await axios.delete(`${API}/patients/${deleteId}`, { withCredentials: true });
+      await axios.post(`${API}/patients/${deleteId}/delete`, {}, { withCredentials: true });
       fetchPatients();
     } catch (e) {
       console.error(e);
       alert(e.response?.data?.detail || "Error al eliminar paciente");
     } finally {
       setDeleteId(null);
+      setConfirmOpen(false);
     }
   };
 

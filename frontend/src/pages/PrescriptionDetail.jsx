@@ -37,7 +37,7 @@ export default function PrescriptionDetail() {
 
   const handleDeleteConfirm = async () => {
     try {
-      await axios.delete(`${API}/prescriptions/${id}`, { withCredentials: true });
+      await axios.post(`${API}/prescriptions/${id}/delete`, {}, { withCredentials: true });
       navigate("/recetas");
     } catch (e) {
       console.error(e);
