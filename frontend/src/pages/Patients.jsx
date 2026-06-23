@@ -9,6 +9,7 @@ import { Label } from "../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
 import { Plus, Search, User, Phone, Calendar, Droplets, ChevronRight, Trash2, Edit2 } from "lucide-react";
+import ConfirmDeleteDialog from "../components/ConfirmDeleteDialog";
 
 const BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const GENDERS = [{ value: "masculino", label: "Masculino" }, { value: "femenino", label: "Femenino" }, { value: "otro", label: "Otro" }];
@@ -35,6 +36,8 @@ export default function Patients() {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [deleteId, setDeleteId] = useState(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const fetchPatients = useCallback(async () => {
     try {
@@ -74,11 +77,17 @@ export default function Patients() {
     setDialogOpen(true);
   };
 
-  const handleDelete = async (id, e) => {
-    e.stopPropagation();
-    if (!window.confirm("¿Eliminar este paciente y todas sus recetas?")) return;
-    await axios.delete(`${API}/patients/${id}`, { withCredentials: true });
-    fetchPatients();
+  const handleDeleteConfirm = async () => {
+    if (!deleteId) return;
+    try {
+      await axios.delete(`${API}/patients/${deleteId}`, { withCredentials: true });
+      fetchPatients();
+    } catch (e) {
+      console.error(e);
+      alert(e.response?.data?.detail || "Error al eliminar paciente");
+    } finally {
+      setDeleteId(null);
+    }
   };
 
   const handleSave = async (e) => {
@@ -208,7 +217,11 @@ export default function Patients() {
                         )}
                         {canDelete && (
                           <button
-                            onClick={(e) => handleDelete(p.id, e)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeleteId(p.id);
+                              setConfirmOpen(true);
+                            }}
                             className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"
                             data-testid={`delete-patient-${p.id}`}
                           >
@@ -298,6 +311,14 @@ export default function Patients() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDeleteDialog
+        isOpen={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        onConfirm={handleDeleteConfirm}
+        title="¿Eliminar expediente de paciente?"
+        description="Esta acción eliminará al paciente de forma permanente junto con todo su historial clínico, recetas médicas y citas agendadas."
+      />
     </div>
   );
 }

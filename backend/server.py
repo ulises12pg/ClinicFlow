@@ -594,6 +594,14 @@ async def update_prescription(rid: str, data: PrescriptionUpdate, u: dict = Depe
         await db.prescriptions.update_one({"_id": ObjectId(rid)}, {"$set": upd})
     return {"ok": True}
 
+@rxs.delete("/{rid}")
+async def delete_prescription(rid: str, u: dict = Depends(current_user)):
+    if u["role"] not in ["admin", "doctor"]:
+        raise HTTPException(403, "Solo médicos o administradores pueden eliminar recetas")
+    safe_oid(rid, "ID de receta")
+    await db.prescriptions.delete_one({"_id": ObjectId(rid)})
+    return {"ok": True}
+
 # ===================== INVENTORY =====================
 inv = APIRouter(prefix="/inventory", tags=["inventory"])
 

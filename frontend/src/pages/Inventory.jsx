@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
 import { Textarea } from "../components/ui/textarea";
 import { Plus, Search, Pill, AlertTriangle, Edit2, Trash2, Package } from "lucide-react";
+import ConfirmDeleteDialog from "../components/ConfirmDeleteDialog";
 
 const CATEGORIES = [
   "Antibiótico", "Analgésico", "Antiinflamatorio", "Antihipertensivo",
@@ -39,6 +40,8 @@ export default function Inventory() {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [deleteId, setDeleteId] = useState(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const canEdit = user?.role === "admin" || user?.role === "doctor";
 
@@ -79,11 +82,17 @@ export default function Inventory() {
     setDialogOpen(true);
   };
 
-  const handleDelete = async (id, e) => {
-    e.stopPropagation();
-    if (!window.confirm("¿Eliminar este medicamento del inventario?")) return;
-    await axios.delete(`${API}/inventory/${id}`, { withCredentials: true });
-    fetchItems();
+  const handleDeleteConfirm = async () => {
+    if (!deleteId) return;
+    try {
+      await axios.delete(`${API}/inventory/${deleteId}`, { withCredentials: true });
+      fetchItems();
+    } catch (e) {
+      console.error(e);
+      alert(e.response?.data?.detail || "Error al eliminar");
+    } finally {
+      setDeleteId(null);
+    }
   };
 
   const handleSave = async (ev) => {
@@ -219,7 +228,15 @@ export default function Inventory() {
                             <button onClick={e => openEdit(item, e)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded" data-testid={`edit-inv-${item.id}`}>
                               <Edit2 size={14} />
                             </button>
-                            <button onClick={e => handleDelete(item.id, e)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded" data-testid={`delete-inv-${item.id}`}>
+                            <button
+                              onClick={e => {
+                                e.stopPropagation();
+                                setDeleteId(item.id);
+                                setConfirmOpen(true);
+                              }}
+                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"
+                              data-testid={`delete-inv-${item.id}`}
+                            >
                               <Trash2 size={14} />
                             </button>
                           </div>
@@ -306,6 +323,14 @@ export default function Inventory() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDeleteDialog
+        isOpen={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        onConfirm={handleDeleteConfirm}
+        title="¿Eliminar lote del inventario?"
+        description="Esta acción eliminará el medicamento y todo su registro de stock de forma permanente."
+      />
     </div>
   );
 }

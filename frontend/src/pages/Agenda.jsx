@@ -14,6 +14,7 @@ import {
   Plus, Clock, User, Calendar as CalIcon, FileText, Edit2, Trash2,
   CheckCheck, Search, ChevronRight
 } from "lucide-react";
+import ConfirmDeleteDialog from "../components/ConfirmDeleteDialog";
 
 // ── Constants ──────────────────────────────────────────
 const APPT_TYPES = [
@@ -73,9 +74,11 @@ export default function Agenda() {
   const [form, setForm]               = useState(emptyForm);
   const [saving, setSaving]           = useState(false);
   const [error, setError]             = useState("");
-  const [patients, setPatients]       = useState([]);
-  const [ptSearch, setPtSearch]       = useState("");
-  const [showPtList, setShowPtList]   = useState(false);
+  const [patients, setPatients] = useState([]);
+  const [ptSearch, setPtSearch] = useState("");
+  const [showPtList, setShowPtList] = useState(false);
+  const [deleteId, setDeleteId] = useState(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   // ── Fetch helpers ─────────────────────────────────────
   const fetchMonth = useCallback(async (month) => {
@@ -164,11 +167,18 @@ export default function Agenda() {
     } finally { setSaving(false); }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm("¿Eliminar esta cita?")) return;
-    await axios.delete(`${API}/appointments/${id}`, { withCredentials: true });
-    fetchMonth(toMonthStr(calMonth));
-    fetchDay(toDateStr(selected));
+  const handleDeleteConfirm = async () => {
+    if (!deleteId) return;
+    try {
+      await axios.delete(`${API}/appointments/${deleteId}`, { withCredentials: true });
+      fetchMonth(toMonthStr(calMonth));
+      fetchDay(toDateStr(selected));
+    } catch (e) {
+      console.error(e);
+      alert(e.response?.data?.detail || "Error al eliminar");
+    } finally {
+      setDeleteId(null);
+    }
   };
 
   const handleStatus = async (id, status) => {
@@ -330,7 +340,10 @@ export default function Agenda() {
                         <Edit2 size={14} />
                       </button>
                       <button
-                        onClick={() => handleDelete(appt.id)}
+                        onClick={() => {
+                          setDeleteId(appt.id);
+                          setConfirmOpen(true);
+                        }}
                         className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"
                         title="Eliminar" data-testid={`appt-delete-${appt.id}`}>
                         <Trash2 size={14} />
@@ -449,6 +462,14 @@ export default function Agenda() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDeleteDialog
+        isOpen={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        onConfirm={handleDeleteConfirm}
+        title="¿Eliminar cita médica?"
+        description="Esta cita será eliminada permanentemente y liberará el horario seleccionado en la agenda."
+      />
     </div>
   );
 }

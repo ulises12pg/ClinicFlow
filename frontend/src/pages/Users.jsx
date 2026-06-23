@@ -8,6 +8,7 @@ import { Label } from "../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
 import { Plus, UserCog, Trash2, Edit2, Shield, User } from "lucide-react";
+import ConfirmDeleteDialog from "../components/ConfirmDeleteDialog";
 
 const ROLES = [
   { value: "admin", label: "Administrador", desc: "Acceso total" },
@@ -32,6 +33,8 @@ export default function Users() {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [deleteId, setDeleteId] = useState(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const fetchUsers = async () => {
     try {
@@ -57,13 +60,15 @@ export default function Users() {
     setDialogOpen(true);
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm("¿Eliminar este usuario?")) return;
+  const handleDeleteConfirm = async () => {
+    if (!deleteId) return;
     try {
-      await axios.delete(`${API}/users/${id}`, { withCredentials: true });
+      await axios.delete(`${API}/users/${deleteId}`, { withCredentials: true });
       fetchUsers();
     } catch (err) {
       alert(err.response?.data?.detail || "Error al eliminar");
+    } finally {
+      setDeleteId(null);
     }
   };
 
@@ -156,7 +161,10 @@ export default function Users() {
                     </button>
                     {u.id !== currentUser?.id && (
                       <button
-                        onClick={() => handleDelete(u.id)}
+                        onClick={() => {
+                          setDeleteId(u.id);
+                          setConfirmOpen(true);
+                        }}
                         className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"
                         data-testid={`delete-user-${u.id}`}
                       >
@@ -229,6 +237,14 @@ export default function Users() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDeleteDialog
+        isOpen={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        onConfirm={handleDeleteConfirm}
+        title="¿Eliminar cuenta de usuario?"
+        description="Esta acción eliminará al usuario de forma permanente y revocará su acceso al sistema."
+      />
     </div>
   );
 }

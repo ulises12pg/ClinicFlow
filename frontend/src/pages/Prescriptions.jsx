@@ -1,16 +1,23 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import { API } from "../contexts/AuthContext";
+import { API, useAuth } from "../contexts/AuthContext";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
-import { Plus, Search, FileText, Printer, Eye } from "lucide-react";
+import { Plus, Search, FileText, Printer, Eye, Trash2 } from "lucide-react";
+import ConfirmDeleteDialog from "../components/ConfirmDeleteDialog";
 
 export default function Prescriptions() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [prescriptions, setPrescriptions] = useState([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  
+  const [deleteId, setDeleteId] = useState(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const canDelete = user?.role === "admin" || user?.role === "doctor";
 
   const fetch = useCallback(async () => {
     try {
@@ -21,6 +28,19 @@ export default function Prescriptions() {
   }, []);
 
   useEffect(() => { fetch(); }, [fetch]);
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteId) return;
+    try {
+      await axios.delete(`${API}/prescriptions/${deleteId}`, { withCredentials: true });
+      fetch();
+    } catch (e) {
+      console.error(e);
+      alert(e.response?.data?.detail || "Error al eliminar receta");
+    } finally {
+      setDeleteId(null);
+    }
+  };
 
   const filtered = prescriptions.filter(p =>
     !search ||
@@ -134,6 +154,19 @@ export default function Prescriptions() {
                         >
                           <Printer size={15} />
                         </button>
+                        {canDelete && (
+                          <button
+                            onClick={() => {
+                              setDeleteId(rx.id);
+                              setConfirmOpen(true);
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"
+                            title="Eliminar receta"
+                            data-testid={`delete-rx-${rx.id}`}
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -143,6 +176,14 @@ export default function Prescriptions() {
           </div>
         )}
       </div>
+
+      <ConfirmDeleteDialog
+        isOpen={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        onConfirm={handleDeleteConfirm}
+        title="¿Eliminar receta médica?"
+        description="Esta receta será eliminada de forma permanente. Ten en cuenta que si el medicamento ya fue dispensado de inventario, esta acción no reabastecerá el stock automáticamente."
+      />
     </div>
   );
 }

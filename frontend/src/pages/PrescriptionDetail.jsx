@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import axios from "axios";
-import { API } from "../contexts/AuthContext";
+import { API, useAuth } from "../contexts/AuthContext";
 import { useSettings } from "../contexts/SettingsContext";
 import { Button } from "../components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
-import { ArrowLeft, Printer, User, Stethoscope } from "lucide-react";
+import { ArrowLeft, Printer, User, Stethoscope, Trash2 } from "lucide-react";
+import ConfirmDeleteDialog from "../components/ConfirmDeleteDialog";
 
 const STATUS_OPTIONS = [
   { value: "activa", label: "Activa" },
@@ -23,12 +24,26 @@ export default function PrescriptionDetail() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { settings } = useSettings();
+  const { user } = useAuth();
   const BACKEND = process.env.REACT_APP_BACKEND_URL;
   const logoSrc = settings?.has_logo ? `${BACKEND}/api/logo` : null;
   const [rx, setRx] = useState(null);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState("");
   const [updating, setUpdating] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const canDelete = user?.role === "admin" || user?.role === "doctor";
+
+  const handleDeleteConfirm = async () => {
+    try {
+      await axios.delete(`${API}/prescriptions/${id}`, { withCredentials: true });
+      navigate("/recetas");
+    } catch (e) {
+      console.error(e);
+      alert(e.response?.data?.detail || "Error al eliminar receta");
+    }
+  };
 
   useEffect(() => {
     axios.get(`${API}/prescriptions/${id}`, { withCredentials: true })
@@ -100,6 +115,16 @@ export default function PrescriptionDetail() {
           >
             <Printer size={15} className="mr-1.5" /> Imprimir / PDF
           </Button>
+          {canDelete && (
+            <Button
+              onClick={() => setConfirmOpen(true)}
+              variant="outline"
+              className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 h-9 text-sm"
+              data-testid="delete-rx-btn"
+            >
+              <Trash2 size={15} className="mr-1.5" /> Eliminar
+            </Button>
+          )}
         </div>
       </div>
 
@@ -219,6 +244,14 @@ export default function PrescriptionDetail() {
           </div>
         </div>
       </div>
+
+      <ConfirmDeleteDialog
+        isOpen={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        onConfirm={handleDeleteConfirm}
+        title="¿Eliminar receta médica?"
+        description="Esta receta será eliminada de forma permanente del sistema. Si el medicamento fue dispensado, esta acción no reabastecerá el stock automáticamente."
+      />
     </div>
   );
 }
