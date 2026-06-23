@@ -10,6 +10,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
 import os, jwt, bcrypt, logging, uuid, asyncio, requests as req_lib, re, io, json, zipfile
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 from typing import Optional, List, Any, Annotated
 from pydantic import BaseModel, BeforeValidator, Field
 from pathlib import Path
@@ -17,6 +18,8 @@ from collections import defaultdict
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+MEXICO_TZ = ZoneInfo("America/Mexico_City")
 
 # --- Object Storage ---
 STORAGE_URL = "https://integrations.emergentagent.com/objstore/api/v1/storage"
@@ -108,17 +111,17 @@ class RateLimiter:
         self._attempts: dict[str, list[float]] = defaultdict(list)
 
     def is_limited(self, key: str) -> bool:
-        now = datetime.now(timezone.utc).timestamp()
+        now = datetime.now(MEXICO_TZ).timestamp()
         cutoff = now - self.window_seconds
         # Purge old entries
         self._attempts[key] = [t for t in self._attempts[key] if t > cutoff]
         return len(self._attempts[key]) >= self.max_attempts
 
     def record(self, key: str):
-        self._attempts[key].append(datetime.now(timezone.utc).timestamp())
+        self._attempts[key].append(datetime.now(MEXICO_TZ).timestamp())
 
     def remaining(self, key: str) -> int:
-        now = datetime.now(timezone.utc).timestamp()
+        now = datetime.now(MEXICO_TZ).timestamp()
         cutoff = now - self.window_seconds
         self._attempts[key] = [t for t in self._attempts[key] if t > cutoff]
         return max(0, self.max_attempts - len(self._attempts[key]))
@@ -144,13 +147,13 @@ def verify_pw(plain: str, hashed: str) -> bool:
 def make_access_token(uid: str, email: str) -> str:
     return jwt.encode(
         {"sub": uid, "email": email, "type": "access",
-         "exp": datetime.now(timezone.utc) + timedelta(hours=8)},
+         "exp": datetime.now(MEXICO_TZ) + timedelta(hours=8)},
         _secret(), algorithm=JWT_ALG)
 
 def make_refresh_token(uid: str) -> str:
     return jwt.encode(
         {"sub": uid, "type": "refresh",
-         "exp": datetime.now(timezone.utc) + timedelta(days=7)},
+         "exp": datetime.now(MEXICO_TZ) + timedelta(days=7)},
         _secret(), algorithm=JWT_ALG)
 
 async def current_user(request: Request) -> dict:
@@ -226,7 +229,7 @@ async def lifespan(app: FastAPI):
             "name": "Administrador", "email": admin_email,
             "password_hash": hash_pw(admin_pw), "role": "admin",
             "specialization": "Administración del Sistema",
-            "created_at": datetime.now(timezone.utc).isoformat()
+            "created_at": datetime.now(MEXICO_TZ).isoformat()
         })
         logger.info(f"Admin user created: {admin_email}")
     elif not verify_pw(admin_pw, existing["password_hash"]):
@@ -371,7 +374,7 @@ async def create_user(data: UserCreate, u: dict = Depends(current_user)):
         raise HTTPException(400, "Email ya registrado")
     doc = {"name": data.name, "email": data.email.lower(), "password_hash": hash_pw(data.password),
            "role": data.role, "specialization": data.specialization, "phone": data.phone,
-           "created_at": datetime.now(timezone.utc).isoformat()}
+           "created_at": datetime.now(MEXICO_TZ).isoformat()}
     r = await db.users.insert_one(doc)
     doc["id"] = str(r.inserted_id)
     doc.pop("_id", None)
@@ -444,7 +447,7 @@ async def list_patients(
 async def create_patient(data: PatientCreate, u: dict = Depends(current_user)):
     doc = {**data.model_dump(), "created_by": u["id"],
            "created_by_name": u["name"],
-           "created_at": datetime.now(timezone.utc).isoformat()}
+           "created_at": datetime.now(MEXICO_TZ).isoformat()}
     r = await db.patients.insert_one(doc)
     doc["id"] = str(r.inserted_id)
     doc.pop("_id", None)
@@ -462,7 +465,7 @@ async def get_patient(pid: str, u: dict = Depends(current_user)):
 async def update_patient(pid: str, data: PatientUpdate, u: dict = Depends(current_user)):
     safe_oid(pid, "ID de paciente")
     upd = {k: v for k, v in data.model_dump().items() if v is not None}
-    upd["updated_at"] = datetime.now(timezone.utc).isoformat()
+    upd["updated_at"] = datetime.now(MEXICO_TZ).isoformat()
     await db.patients.update_one({"_id": ObjectId(pid)}, {"$set": upd})
     return {"ok": True}
 
@@ -546,7 +549,7 @@ async def create_prescription(data: PrescriptionCreate, u: dict = Depends(curren
             res = await db.inventory.update_one(
                 {"_id": ObjectId(inv_id), "quantity": {"$gte": qty}},
                 {"$inc": {"quantity": -qty},
-                 "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}}
+                 "$set": {"updated_at": datetime.now(MEXICO_TZ).isoformat()}}
             )
             if res.modified_count == 0:
                 # Concurrent change — rollback what we already decremented
@@ -559,7 +562,7 @@ async def create_prescription(data: PrescriptionCreate, u: dict = Depends(curren
     except HTTPException:
         raise
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(MEXICO_TZ)
     doc = {"patient_id": data.patient_id, "patient_name": p["name"],
            "patient_dob": p.get("date_of_birth"),
            "doctor_id": u["id"], "doctor_name": u["name"],
@@ -646,7 +649,7 @@ async def list_inventory(
 async def create_inv(data: InvCreate, u: dict = Depends(current_user)):
     if u["role"] not in ["admin", "doctor"]:
         raise HTTPException(403, "Acceso denegado")
-    doc = {**data.model_dump(), "created_at": datetime.now(timezone.utc).isoformat()}
+    doc = {**data.model_dump(), "created_at": datetime.now(MEXICO_TZ).isoformat()}
     r = await db.inventory.insert_one(doc)
     doc["id"] = str(r.inserted_id)
     doc.pop("_id", None)
@@ -658,7 +661,7 @@ async def update_inv(iid: str, data: InvUpdate, u: dict = Depends(current_user))
         raise HTTPException(403, "Acceso denegado")
     safe_oid(iid, "ID de inventario")
     upd = {k: v for k, v in data.model_dump().items() if v is not None}
-    upd["updated_at"] = datetime.now(timezone.utc).isoformat()
+    upd["updated_at"] = datetime.now(MEXICO_TZ).isoformat()
     await db.inventory.update_one({"_id": ObjectId(iid)}, {"$set": upd})
     return {"ok": True}
 
@@ -675,7 +678,7 @@ dash = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 @dash.get("/stats")
 async def stats(u: dict = Depends(current_user)):
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = datetime.now(MEXICO_TZ).strftime("%Y-%m-%d")
     tp = await db.patients.count_documents({})
     pt = await db.prescriptions.count_documents({"date": today})
     ls = await db.inventory.count_documents({"$expr": {"$lte": ["$quantity", "$min_stock"]}})
@@ -723,11 +726,19 @@ async def create_appt(data: ApptCreate, u: dict = Depends(current_user)):
     if not p:
         raise HTTPException(404, "Paciente no encontrado")
         
+    try:
+        appt_dt = datetime.strptime(f"{data.date} {data.time}", "%Y-%m-%d %H:%M").replace(tzinfo=MEXICO_TZ)
+        now_mx = datetime.now(MEXICO_TZ)
+        if appt_dt < now_mx + timedelta(hours=7):
+            raise HTTPException(400, "La cita debe programarse con al menos 7 horas de anticipación")
+    except ValueError:
+        raise HTTPException(400, "Formato de fecha u hora inválido")
+        
     doc = {"patient_id": data.patient_id, "patient_name": p["name"],
            "doctor_id": u["id"], "doctor_name": u["name"],
            "date": data.date, "time": data.time, "duration": data.duration,
            "type": data.type, "status": "programada", "notes": data.notes,
-           "created_at": datetime.now(timezone.utc).isoformat()}
+           "created_at": datetime.now(MEXICO_TZ).isoformat()}
     r = await db.appointments.insert_one(doc)
     doc["id"] = str(r.inserted_id); doc.pop("_id", None)
     return doc
@@ -743,6 +754,23 @@ async def get_appt(aid: str, u: dict = Depends(current_user)):
 async def update_appt(aid: str, data: ApptUpdate, u: dict = Depends(current_user)):
     safe_oid(aid, "ID de cita")
     upd = {k: v for k, v in data.model_dump().items() if v is not None}
+    
+    a = await db.appointments.find_one({"_id": ObjectId(aid)})
+    if not a:
+        raise HTTPException(404, "Cita no encontrada")
+
+    new_date = upd.get("date", a.get("date"))
+    new_time = upd.get("time", a.get("time"))
+    
+    if "date" in upd or "time" in upd:
+        try:
+            appt_dt = datetime.strptime(f"{new_date} {new_time}", "%Y-%m-%d %H:%M").replace(tzinfo=MEXICO_TZ)
+            now_mx = datetime.now(MEXICO_TZ)
+            if appt_dt < now_mx + timedelta(hours=7):
+                raise HTTPException(400, "La cita debe programarse con al menos 7 horas de anticipación")
+        except ValueError:
+            raise HTTPException(400, "Formato de fecha u hora inválido")
+
     if "patient_id" in upd:
         safe_oid(upd["patient_id"], "ID de paciente")
         p = await db.patients.find_one({"_id": ObjectId(upd["patient_id"])})
@@ -805,7 +833,7 @@ async def update_cfg(data: CfgUpdate, u: dict = Depends(current_user)):
     if u["role"] != "admin":
         raise HTTPException(403, "Solo administradores pueden cambiar la configuración")
     upd = {k: v for k, v in data.model_dump().items() if v is not None}
-    upd["updated_at"] = datetime.now(timezone.utc).isoformat()
+    upd["updated_at"] = datetime.now(MEXICO_TZ).isoformat()
     await db.settings.update_one({}, {"$set": upd}, upsert=True)
     return {"ok": True}
 
@@ -833,7 +861,7 @@ async def upload_logo(file: UploadFile = File(...), u: dict = Depends(current_us
         # Save path in settings
         await db.settings.update_one(
             {}, {"$set": {"clinic_logo_path": result["path"],
-                          "updated_at": datetime.now(timezone.utc).isoformat()}},
+                          "updated_at": datetime.now(MEXICO_TZ).isoformat()}},
             upsert=True
         )
         return {"ok": True, "logo_url": "/api/logo"}
@@ -896,7 +924,7 @@ async def backup_export(u: dict = Depends(current_user)):
     if u["role"] != "admin":
         raise HTTPException(403, "Solo administradores pueden exportar respaldos")
     
-    now = datetime.now(timezone.utc)
+    now = datetime.now(MEXICO_TZ)
     
     # Collect all data
     export_data = {
@@ -1021,7 +1049,7 @@ async def backup_import(
     if import_data["meta"].get("app") != "ClinicFlow":
         raise HTTPException(400, "Este respaldo no pertenece a ClinicFlow")
     
-    now = datetime.now(timezone.utc)
+    now = datetime.now(MEXICO_TZ)
     summary = {"mode": mode, "imported": {}, "skipped": {}, "errors": []}
     
     if mode == "replace":

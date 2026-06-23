@@ -142,10 +142,10 @@ export default function Agenda() {
 
     const apptDateTime = new Date(`${form.date}T${form.time}:00`);
     const limitTime = new Date();
-    limitTime.setHours(limitTime.getHours() + 1);
+    limitTime.setHours(limitTime.getHours() + 7);
     
     if (apptDateTime < limitTime) { 
-      setError("La cita debe programarse con al menos 1 hora de anticipación"); 
+      setError("La cita debe programarse con al menos 7 horas de anticipación"); 
       return; 
     }
 
