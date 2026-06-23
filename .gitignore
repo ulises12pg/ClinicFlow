@@ -1,0 +1,191 @@
+# ============================================================
+# 🔐 SECRETOS Y VARIABLES DE ENTORNO — NUNCA commitear
+# ============================================================
+.env
+.env.*
+!.env.example
+!.env.sample
+*.env
+.envrc
+
+# Credenciales y llaves
+*.pem
+*.key
+*.cert
+*.crt
+*.p12
+*.pfx
+*token*.json
+*credentials*.json
+.credentials/
+secrets/
+
+# ============================================================
+# 📦 DEPENDENCIAS
+# ============================================================
+
+# Node / Yarn
+node_modules/
+/.pnp
+.pnp.js
+.yarn/install-state.gz
+.yarn/cache
+.yarn/build-state.yml
+.yarn/unplugged
+.pnpm-store/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+.eggs/
+venv/
+.venv/
+env/
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+
+# ============================================================
+# 🧪 TESTING Y COBERTURA
+# ============================================================
+/coverage
+htmlcov/
+.coverage
+.coverage.*
+.cache/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.tox/
+.nox/
+nosetests.xml
+coverage.xml
+*.cover
+test_reports/
+test_results.md
+backend/tests/__pycache__/
+
+# ============================================================
+# 🏗️ BUILDS Y DISTRIBUCIONES
+# ============================================================
+/build
+build/
+dist/
+out/
+/.next/
+next-env.d.ts
+*.tsbuildinfo
+.parcel-cache/
+.turbo/
+
+# ============================================================
+# 📝 LOGS Y DEBUG
+# ============================================================
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+lerna-debug.log*
+debug.log
+dump.rdb
+
+# ============================================================
+# 💻 IDE Y EDITORES
+# ============================================================
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+*.sublime-project
+*.sublime-workspace
+
+# ============================================================
+# 🖥️ SISTEMA OPERATIVO
+# ============================================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ============================================================
+# 📦 ARCHIVOS COMPRIMIDOS Y BINARIOS GRANDES
+# ============================================================
+**/*.zip
+**/*.tar
+**/*.tar.gz
+**/*.tgz
+*.pack
+*.deb
+*.dylib
+*.dll
+*.exe
+
+# ============================================================
+# 🚀 DEPLOY Y SERVIDORES
+# ============================================================
+.vercel
+.netlify
+.serverless/
+.firebase/
+
+# ============================================================
+# 📊 PROYECTO MEDCONSULTA — específicos
+# ============================================================
+
+# Credenciales de prueba (regeneradas por el backend en cada arranque)
+memory/test_credentials.md
+
+# Documentos internos de desarrollo (Emergent)
+test_result.md
+design_guidelines.json
+design_guidelines.md
+
+# Reportes de testing automáticos
+test_reports/
+
+# Archivos temporales
+tmp/
+temp/
+*.tmp
+*.bak
+*.backup
+
+# Bases de datos locales
+*.db
+*.sqlite
+*.sqlite3
+mongo-data/
+
+# Subidas de usuario en local (logos, etc.)
+uploads/
+
+# ============================================================
+# 🛠️ HERRAMIENTAS DE DESARROLLO
+# ============================================================
+.ipynb_checkpoints/
+chainlit.md
+.chainlit
+.ac
+android-sdk/
+-e 
+# Environment and credential files
+.env
+.env.*
+*.env
+credentials.json
+*.pem
+*.key
+.credentials

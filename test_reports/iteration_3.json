@@ -1,0 +1,47 @@
+{
+  "summary": "Tested the new Email Reminders (Resend + APScheduler) feature end-to-end plus regression of all prior modules. Backend: 32/32 pytest tests pass (including 6 NEW tests for send-reminder and run-daily-reminders-now). Frontend: full reminder flow verified — patient form has email input (type='email'), Agenda shows green MailCheck icon (data-testid='appt-reminder-sent-{id}') for the already-sent Antonieta appointment, send-reminder button works for an appointment whose patient has no email and triggers the expected alert ('Paciente sin email registrado'). APScheduler confirmed running from supervisor logs ('Reminder scheduler started: every day at 20:00 (America/Mexico_City)'). Existing appointment 69fceeb321544b79331be169 (Antonieta) confirmed to have all email_reminder_* fields persisted (sent=true, sent_at, to=ulises12pg@gmail.com, id=9a5a8d36-...).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/appointments/{id}/send-reminder", "issue": "When the patient has no email, the server correctly returns 400 with detail='Paciente sin email registrado' BUT the appointment-not-found path uses a raw ObjectId(aid) call. If the caller passes a non-24-hex string, FastAPI/Pymongo would raise InvalidId and surface as 500 instead of 404/400. Add try/except or use ObjectId.is_valid() guard.", "priority": "LOW"},
+      {"endpoint": "POST /api/appointments/run-daily-reminders-now", "issue": "Always returns 200 even if scheduler isn't running. Could optionally include a 'scheduler_running' flag for ops visibility.", "priority": "LOW"},
+      {"endpoint": "GET /api/appointments", "issue": "Stale findings still apply: PUT/DELETE on missing id silently returns ok; date/time format not validated; month=YYYY-MM uses unanchored regex. Carrying forward from iteration_2.", "priority": "LOW"}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Agenda — appointment row icons", "issues": ["Two adjacent envelope icons appear when the reminder was already sent (the always-clickable Mail send button + the green MailCheck status badge). Could be confusing — consider hiding the manual send button after reminder is sent, or adding a tooltip 'Reenviar' to make it explicit."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_medconsulta.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(Optional) Guard ObjectId(aid) in send_reminder_endpoint with ObjectId.is_valid() to avoid 500 on malformed ids.",
+    "(Optional) After reminder is sent, hide or disable the Mail send button in Agenda.jsx and only show the green MailCheck (currently both render side-by-side).",
+    "(Carry-over) Return 404 in PUT/DELETE /api/appointments/{id} when resource doesn't exist.",
+    "(Carry-over) Add Pydantic validators for ApptCreate.date / time formats."
+  ],
+  "critical_code_review_comments": [
+    "server.py is now 865 lines (grew further with reminder helpers + scheduler). Strongly recommend splitting into routers/ submodules (auth, patients, appointments, reminders, settings).",
+    "send_reminder_for_appt updates the DB AFTER the Resend call without rollback semantics. If the network blip happens between Resend success and DB update, the email is sent but the flag is not persisted — daily job could resend. Consider wrapping in try/finally or re-querying email_reminder_id from Resend.",
+    "daily_reminder_job string-matches reason starts-with 'Paciente sin email' to count skipped. Brittle. Better: return a structured reason code (e.g., 'NO_EMAIL').",
+    "RESEND_API_KEY is committed in .env (sandbox key). Acceptable for sandbox but should be flagged for production deploy.",
+    "send_reminder_endpoint uses Depends(current_user) but does NOT restrict by role — any logged-in user can trigger an email send. Consider doctor/admin-only restriction.",
+    "scheduler.add_job uses replace_existing=True logic via id — confirmed from log 'Adding job tentatively'. The supervisor restart spawned the scheduler twice in logs (line 286 then 304); confirm only one process is alive (uvicorn --reload sometimes double-instantiates on file change). Risk: reminders could fire twice."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_medconsulta.py",
+    "/app/test_reports/iteration_3.json"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "admin@medconsulta.com / Admin123! (verified). Doctor for 403 test: test_dr_lopez@medconsulta.com / Doctor123! (created+deleted in same run).",
+  "seed_data_creation": "Created and cleaned up: TEST_Juan Garcia patient (no email), prescription, TEST_Paracetamol 500mg, test_dr_lopez doctor user, multiple test appointments. Created+deleted appt 69fcf7125860b464717b8d3d for the no-email frontend test. Pre-existing Antonieta appt (69fceeb321544b79331be169) preserved untouched (just verified its email_reminder_* fields persisted from earlier curl test).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend tests: pytest /app/backend/tests/test_medconsulta.py -v (32 tests). New TestReminders class has 6 tests: 401 unauth, 404 invalid id, 400 no-email, persistence verification, 403 non-admin, 200 admin summary. Resend is in SANDBOX mode — only ulises12pg@gmail.com receives real emails; tests deliberately avoid real sends except for the pre-existing Antonieta appt. APScheduler runs daily 20:00 America/Mexico_City — to test manually use POST /api/appointments/run-daily-reminders-now. Frontend: handle window.alert with page.on('dialog', ...). The Agenda renders BOTH the Mail button (always clickable) and the MailCheck icon (after sent) — current design.",
+  "rca of the issue": "No bugs encountered. Feature works as designed. The agent_to_agent_context_note guidance was followed: happy-path was NOT triggered to avoid additional Resend sandbox calls; instead, the persistence check verifies the prior curl-triggered send. The 400/no-email and 403/non-admin paths both verified end-to-end."
+}

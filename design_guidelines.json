@@ -1,0 +1,87 @@
+{
+  "theme": "light",
+  "archetype": "1 - Organic & Earthy (Clinical Trust Variant)",
+  "rationale": "Medical professionals need a calm, highly readable, and straightforward interface. We use solid surfaces to prevent visual clutter, a trusting blue primary color, and high-contrast text for accessibility. The Spanish language interface will focus on clear, non-technical terminology (e.g., 'Nueva Receta' instead of 'Create Prescription Record').",
+  "typography": {
+    "heading_font": "Manrope",
+    "body_font": "IBM Plex Sans",
+    "scales": {
+      "h1": "text-4xl tracking-tight font-bold",
+      "h2": "text-2xl tracking-tight font-semibold",
+      "h3": "text-xl font-medium",
+      "body": "text-base leading-relaxed",
+      "small": "text-sm text-slate-600",
+      "label": "text-xs font-semibold tracking-wide uppercase text-slate-500"
+    }
+  },
+  "colors": {
+    "background": "bg-slate-50",
+    "surface": "bg-white",
+    "primary": "bg-blue-600 hover:bg-blue-700 text-white",
+    "secondary": "bg-slate-100 hover:bg-slate-200 text-slate-900",
+    "success": "bg-emerald-50 text-emerald-700 border-emerald-200",
+    "warning": "bg-amber-50 text-amber-700 border-amber-200",
+    "danger": "bg-red-50 text-red-700 border-red-200",
+    "text_primary": "text-slate-900",
+    "text_secondary": "text-slate-600",
+    "border": "border-slate-200"
+  },
+  "spacing_and_layout": {
+    "container_padding": "p-6 md:p-8",
+    "gap": "gap-6",
+    "border_radius": "rounded-lg",
+    "shadows": "shadow-sm",
+    "card_style": "bg-white border border-slate-200 rounded-lg p-6",
+    "dashboard_grid": "grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6",
+    "form_layout": "space-y-6 max-w-2xl"
+  },
+  "navigation": {
+    "style": "Side navigation for desktop (w-64, bg-slate-900 text-slate-300, active items bg-blue-600 text-white) to give a solid anchor, with a top header for mobile and user profile.",
+    "links": [
+      { "label": "Panel Principal", "path": "/dashboard", "icon": "SquaresFour" },
+      { "label": "Pacientes", "path": "/pacientes", "icon": "Users" },
+      { "label": "Recetas Médicas", "path": "/recetas", "icon": "Prescription" },
+      { "label": "Inventario", "path": "/inventario", "icon": "Pill" },
+      { "label": "Configuración", "path": "/configuracion", "icon": "Gear" }
+    ]
+  },
+  "components": {
+    "buttons": "Large click targets (h-12). Primary buttons use bg-blue-600 text-white with transition-colors. Include data-testid attributes.",
+    "inputs": "Shadcn standard inputs. h-12 for better ergonomics. Focus state: focus:ring-2 focus:ring-blue-600 focus:border-transparent.",
+    "tables": "Clean, flat tables. border-b border-slate-200 on rows. Hover state: hover:bg-slate-50. Left-aligned text.",
+    "modals": "Solid white background, backdrop-blur-sm on the overlay bg-slate-900/40. Max width md."
+  },
+  "icons": {
+    "library": "@phosphor-icons/react",
+    "installation": "yarn add @phosphor-icons/react",
+    "style": "Regular or Duotone for active states"
+  },
+  "accessibility": {
+    "contrast": "All text meets WCAG AA standards. Focus rings must be visible.",
+    "testing": "All interactive elements must have data-testid (e.g., data-testid='login-btn').",
+    "animations": "Minimal. Page transitions and button hovers only."
+  },
+  "media": {
+    "login_background": {
+      "url": "https://images.unsplash.com/photo-1710074213374-e68503a1b795?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzV8MHwxfHNlYXJjaHwxfHxhYnN0cmFjdCUyMGJyaWdodCUyMG1lZGljYWwlMjBjbGluaWMlMjBpbnRlcmlvciUyMGJsdXJyZWQlMjBiYWNrZ3JvdW5kfGVufDB8fHx8MTc3NzkzMDU1MXww&ixlib=rb-4.1.0&q=85",
+      "description": "Blurred hospital room, used for login page split-screen background."
+    },
+    "clinic_logo_placeholder": {
+      "url": "https://images.unsplash.com/photo-1649262050717-d8e1e7abef13?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1ODh8MHwxfHNlYXJjaHwxfHxtaW5pbWFsaXN0JTIwbWVkaWNhbCUyMGNyb3NzJTIwbG9nbyUyMGJsdWV8ZW58MHx8fHwxNzc3OTMwNTUyfDA&ixlib=rb-4.1.0&q=85",
+      "description": "Blue medical cross logo."
+    },
+    "doctor_avatars": [
+      "https://images.unsplash.com/photo-1612531386530-97286d97c2d2?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzV8MHwxfHNlYXJjaHwzfHxkaXZlcnNlJTIwZG9jdG9yJTIwcG9ydHJhaXRzJTIwcHJvZmVzc2lvbmFsfGVufDB8fHx8MTc3NzkzMDU1Mnww&ixlib=rb-4.1.0&q=85",
+      "https://images.unsplash.com/photo-1627093143401-2ade923be6c2?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzV8MHwxfHNlYXJjaHwxfHxkaXZlcnNlJTIwZG9jdG9yJTIwcG9ydHJhaXRzJTIwcHJvZmVzc2lvbmFsfGVufDB8fHx8MTc3NzkzMDU1Mnww&ixlib=rb-4.1.0&q=85",
+      "https://images.unsplash.com/photo-1666887360369-1901f341fdad?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzV8MHwxfHNlYXJjaHwyfHxkaXZlcnNlJTIwZG9jdG9yJTIwcG9ydHJhaXRzJTIwcHJvZmVzc2lvbmFsfGVufDB8fHx8MTc3NzkzMDU1Mnww&ixlib=rb-4.1.0&q=85"
+    ]
+  },
+  "instructions_to_main_agent": [
+    "Ensure all user-facing text is in Spanish.",
+    "For the PDF Export functionality (Recetas), create a print-specific CSS class (`@media print`) that hides the navigation and UI buttons, showing only the prescription details with a clean white background and the clinic logo.",
+    "Use Phosphor icons for all navigation and action buttons to ensure a polished look.",
+    "When creating forms (New Patient, New Prescription), group inputs logically and use large text fields. Avoid complex nested menus.",
+    "The Dashboard should display key metrics: Patients Today, Low Stock Inventory, Recent Prescriptions.",
+    "Add 'data-testid' to all buttons, links, and forms for reliable testing."
+  ]
+}

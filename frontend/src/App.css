@@ -1,0 +1,104 @@
+/* MedConsulta - Global Styles */
+
+/* Print styles for prescriptions */
+@media print {
+  body * { visibility: hidden !important; }
+  #prescription-print-content,
+  #prescription-print-content * { visibility: visible !important; }
+  #prescription-print-content {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    background: white !important;
+    padding: 40px !important;
+    z-index: 9999 !important;
+  }
+  .no-print { display: none !important; }
+}
+
+/* Smooth transitions */
+* {
+  transition-property: background-color, border-color, color, fill, stroke, opacity, box-shadow;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+
+/* Page entrance animation */
+.page-enter {
+  animation: fadeSlideIn 0.2s ease-out;
+}
+
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Status badges */
+.badge-activa    { background:#ecfdf5; color:#059669; border:1px solid #a7f3d0; }
+.badge-completada{ background:#f8fafc; color:#64748b; border:1px solid #e2e8f0; }
+.badge-cancelada { background:#fef2f2; color:#dc2626; border:1px solid #fecaca; }
+
+/* Low stock indicators */
+.stock-low      { background:#fef3c7; color:#d97706; }
+.stock-critical { background:#fee2e2; color:#dc2626; }
+.stock-ok       { background:#ecfdf5; color:#059669; }
+
+/* ===== DARK MODE GLOBAL OVERRIDES ===== */
+
+/* Body / page background */
+.dark body { background-color: #0d1526; }
+
+/* Surfaces */
+.dark .bg-white       { background-color: #1a2744 !important; }
+.dark .bg-slate-50    { background-color: #0d1526 !important; }
+.dark .bg-slate-100   { background-color: #1a2744 !important; }
+
+/* Borders */
+.dark .border-slate-200 { border-color: #2d3f60 !important; }
+.dark .border-slate-100 { border-color: #1e2e4a !important; }
+.dark .divide-slate-50  > * + * { border-color: #1e2e4a !important; }
+.dark .divide-slate-100 > * + * { border-color: #2d3f60 !important; }
+
+/* Text */
+.dark .text-slate-900 { color: #f1f5f9 !important; }
+.dark .text-slate-800 { color: #e2e8f0 !important; }
+.dark .text-slate-700 { color: #cbd5e1 !important; }
+.dark .text-slate-600 { color: #94a3b8 !important; }
+.dark .text-slate-500 { color: #64748b !important; }
+.dark .text-slate-400 { color: #4e617e !important; }
+
+/* Hover rows */
+.dark .hover\:bg-slate-50:hover  { background-color: #1e2e4a !important; }
+.dark .hover\:bg-slate-100:hover { background-color: #253352 !important; }
+
+/* Inputs & textareas */
+.dark input:not([type="checkbox"]):not([type="radio"]),
+.dark textarea,
+.dark select {
+  background-color: #1a2744 !important;
+  border-color: #2d3f60 !important;
+  color: #f1f5f9 !important;
+}
+.dark input::placeholder,
+.dark textarea::placeholder { color: #4e617e !important; }
+
+/* Colored light backgrounds → dark equivalents */
+.dark .bg-blue-50     { background-color: rgba(37,99,235,0.15) !important; }
+.dark .bg-blue-100    { background-color: rgba(37,99,235,0.20) !important; }
+.dark .bg-amber-50    { background-color: rgba(217,119,6,0.15)  !important; }
+.dark .bg-amber-100   { background-color: rgba(217,119,6,0.20)  !important; }
+.dark .bg-red-50      { background-color: rgba(220,38,38,0.15)  !important; }
+.dark .bg-emerald-50  { background-color: rgba(5,150,105,0.15)  !important; }
+.dark .bg-violet-50   { background-color: rgba(124,58,237,0.15) !important; }
+.dark .bg-violet-100  { background-color: rgba(124,58,237,0.20) !important; }
+
+/* Status badges dark */
+.dark .badge-activa     { background:rgba(5,150,105,0.20); color:#34d399; border-color:rgba(5,150,105,0.30); }
+.dark .badge-completada { background:rgba(30,42,74,0.8); color:#94a3b8; border-color:#2d3f60; }
+.dark .badge-cancelada  { background:rgba(220,38,38,0.20); color:#f87171; border-color:rgba(220,38,38,0.30); }
+
+/* Stock indicators dark */
+.dark .stock-low      { background:rgba(217,119,6,0.20); color:#fbbf24; }
+.dark .stock-critical { background:rgba(220,38,38,0.20); color:#f87171; }
+.dark .stock-ok       { background:rgba(5,150,105,0.20); color:#34d399; }
