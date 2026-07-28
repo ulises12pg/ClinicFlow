@@ -22,16 +22,46 @@ Sistema de gestión integral para consultorio médico familiar. Permite expedir 
 ## 🛠️ Stack tecnológico
 
 **Backend**
-- [FastAPI](https://fastapi.tiangolo.com/) (Python 3.11+)
-- [MongoDB](https://www.mongodb.com/) con [Motor](https://motor.readthedocs.io/) (async driver)
-
-- JWT (PyJWT) + bcrypt para autenticación
+- [FastAPI](https://fastapi.tiangolo.com/) (Python 3.11+) - Framework web asíncrono y de alto rendimiento.
+- [MongoDB](https://www.mongodb.com/) con [Motor](https://motor.readthedocs.io/) - Driver asíncrono oficial para almacenamiento NoSQL.
+- [Uvicorn](https://www.uvicorn.org/) - Servidor ASGI para producción y desarrollo.
+- JWT (PyJWT) + bcrypt (`passlib`) para autenticación y encriptación.
 
 **Frontend**
 - [React 19](https://react.dev/) + [React Router 7](https://reactrouter.com/)
 - [Tailwind CSS](https://tailwindcss.com/) + [shadcn/ui](https://ui.shadcn.com/)
 - [react-day-picker](https://react-day-picker.js.org/) para el calendario
 - [Axios](https://axios-http.com/), [Lucide React](https://lucide.dev/)
+
+---
+
+## ⚙️ Arquitectura y Funcionamiento del Backend
+
+### 1. 🐍 Framework y Servidor ASGI
+- **FastAPI + Uvicorn**: El backend está implementado completamente en Python 3.11+ sobre **FastAPI**. Utiliza **Uvicorn** como servidor ASGI (`uvicorn server:app --host 0.0.0.0 --port $PORT`).
+- **Documentación Interactiva**: FastAPI genera de forma automática la documentación OpenAPI / Swagger en la ruta `/docs`.
+
+### 2. ☁️ Plataforma de Hosting y Despliegue
+- **Render.com**: Incluye la plantilla de infraestructura como código [`backend/render.yaml`](file:///c:/Users/ELITE%20DESK/Documents/GitHub/ClinicFlow/backend/render.yaml) lista para despliegue en **Render** como un *Web Service*.
+- **Compatibilidad PaaS / VPS**: Puede alojarse sin modificaciones en cualquier servidor Linux (Ubuntu/Debian), contenedor Docker, o servicios como Railway, Fly.io, AWS EC2 / App Runner.
+
+### 3. 🍃 Base de Datos MongoDB
+- **Driver Asíncrono (Motor)**: Utiliza `AsyncIOMotorClient` para operaciones de lectura/escritura totalmente no bloqueantes.
+- **Conexión Flexible**: Se conecta vía `MONGO_URL` a una instancia local de MongoDB (`mongodb://localhost:27017`) o a un cluster en la nube (**MongoDB Atlas**).
+- **Colecciones**: Almacena de forma estructurada documentos BSON para `users`, `patients`, `prescriptions`, `inventory`, `appointments` y `settings`.
+
+### 4. 🔐 Seguridad y Autenticación
+- **Tokens JWT**: Emite tokens de acceso (`access_token`, expira en 8h) y refresco (`refresh_token`, expira en 7 días) firmados con algoritmos HMAC-SHA256 (`HS256`).
+- **Cookies Seguras**: Soporta transmisión de tokens a través de cookies HTTP-Only (`access_token`) así como mediante el encabezado estándar `Authorization: Bearer <token>`.
+- **Hashing de Claves**: Las contraseñas de usuario se almacenan usando **bcrypt** con salt aleatorio.
+- **Protección Anti-ataques**:
+  - **Rate Limiting**: Control en memoria por dirección IP para prevenir ataques de fuerza bruta en el inicio de sesión.
+  - **Sanitización Regex**: Prevención de ataques ReDoS en búsquedas de pacientes/medicamentos.
+
+### 5. ⚡ Middlewares y Servicios Adicionales
+- **CORS Middleware**: Restricción de orígenes cruzados configurables mediante `CORS_ORIGINS` y `FRONTEND_URL`.
+- **Compresión GZip**: Optimización de carga útil en respuestas JSON voluminosas.
+- **Gestión de Archivos**: Almacenamiento local (`uploads/`) u Object Storage remoto para la personalización de logos del consultorio.
 
 ---
 
@@ -125,8 +155,12 @@ yarn start
 ```
 
 Abre [http://localhost:3000](http://localhost:3000) y entra con:
-- **Email:** `admin@medconsulta.com`
-- **Password:** `Admin123!`
+- **Administrador (Acceso Total):**
+  - **Email:** `admin@medconsulta.com`
+  - **Password:** `Admin123!`
+- **Usuario Demo (Acceso Restringido - Sin Administración de Usuarios):**
+  - **Email:** `demo@medconsulta.com`
+  - **Password:** `Demo123!`
 
 ---
 
@@ -141,6 +175,7 @@ Abre [http://localhost:3000](http://localhost:3000) y entra con:
 | `CORS_ORIGINS` | Orígenes permitidos (coma-separado) | `http://localhost:3000` |
 | `JWT_SECRET` | Secreto JWT (genera uno único) | `openssl rand -hex 32` |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Bootstrap del admin | `admin@medconsulta.com` / `Admin123!` |
+| `DEMO_EMAIL` / `DEMO_PASSWORD` | Bootstrap del usuario demo (restringido) | `demo@medconsulta.com` / `Demo123!` |
 | `FRONTEND_URL` | URL del frontend (para cookies seguras) | `http://localhost:3000` |
 
 | `EMERGENT_LLM_KEY` | Para Object Storage de logos (opcional) | `sk-emergent-xxx` |

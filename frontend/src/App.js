@@ -24,7 +24,8 @@ function ProtectedRoute({ children, adminOnly = false }) {
     </div>
   );
   if (!user) return <Navigate to="/login" replace />;
-  if (adminOnly && user.role !== "admin") return <Navigate to="/dashboard" replace />;
+  const isDemo = user.email?.toLowerCase().includes("demo");
+  if (adminOnly && (user.role !== "admin" || isDemo)) return <Navigate to="/dashboard" replace />;
   return children;
 }
 

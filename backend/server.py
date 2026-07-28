@@ -236,6 +236,26 @@ async def lifespan(app: FastAPI):
         await db.users.update_one({"email": admin_email},
                                    {"$set": {"password_hash": hash_pw(admin_pw)}})
 
+    # --- Usuario Demo (Restringido por defecto de la gestión de usuarios) ---
+    demo_email = os.environ.get("DEMO_EMAIL", "demo@medconsulta.com")
+    demo_pw = os.environ.get("DEMO_PASSWORD", "Demo123!")
+    existing_demo = await db.users.find_one({"email": demo_email})
+    if not existing_demo:
+        await db.users.insert_one({
+            "name": "Usuario Demo",
+            "email": demo_email,
+            "password_hash": hash_pw(demo_pw),
+            "role": "doctor",  # Rol de médico (sin acceso a administración de usuarios)
+            "specialization": "Medicina General (Demo)",
+            "created_at": datetime.now(MEXICO_TZ).isoformat()
+        })
+        logger.info(f"Demo user created: {demo_email}")
+    else:
+        # Asegurar que el usuario demo NUNCA tenga rol admin
+        if existing_demo.get("role") == "admin":
+            await db.users.update_one({"email": demo_email}, {"$set": {"role": "doctor"}})
+            logger.info(f"Demo user role updated to 'doctor' (restricted from user management)")
+
     logger.info("Startup complete")
     
     yield  # --- APP RUNS ---
@@ -359,17 +379,21 @@ class UserUpdate(BaseModel):
     specialization: Optional[str] = None
     phone: Optional[str] = None
 
+def require_admin_access(u: dict):
+    demo_email = os.environ.get("DEMO_EMAIL", "demo@medconsulta.com").lower()
+    user_email = u.get("email", "").lower()
+    if u.get("role") != "admin" or user_email == demo_email or "demo" in user_email:
+        raise HTTPException(403, "Acceso denegado. El usuario Demo no tiene permiso para administrar usuarios.")
+
 @users_r.get("")
 async def list_users(u: dict = Depends(current_user)):
-    if u["role"] != "admin":
-        raise HTTPException(403, "Acceso denegado")
+    require_admin_access(u)
     result = await db.users.find({}, {"password_hash": 0}).to_list(200)
     return [s(r) for r in result]
 
 @users_r.post("")
 async def create_user(data: UserCreate, u: dict = Depends(current_user)):
-    if u["role"] != "admin":
-        raise HTTPException(403, "Acceso denegado")
+    require_admin_access(u)
     if await db.users.find_one({"email": data.email.lower()}):
         raise HTTPException(400, "Email ya registrado")
     doc = {"name": data.name, "email": data.email.lower(), "password_hash": hash_pw(data.password),
@@ -383,8 +407,7 @@ async def create_user(data: UserCreate, u: dict = Depends(current_user)):
 
 @users_r.put("/{uid}")
 async def update_user(uid: str, data: UserUpdate, u: dict = Depends(current_user)):
-    if u["role"] != "admin":
-        raise HTTPException(403, "Acceso denegado")
+    require_admin_access(u)
     safe_oid(uid, "ID de usuario")
     upd = {k: v for k, v in data.model_dump().items() if v is not None}
     if upd:
@@ -393,8 +416,7 @@ async def update_user(uid: str, data: UserUpdate, u: dict = Depends(current_user
 
 @users_r.delete("/{uid}")
 async def delete_user(uid: str, u: dict = Depends(current_user)):
-    if u["role"] != "admin":
-        raise HTTPException(403, "Acceso denegado")
+    require_admin_access(u)
     safe_oid(uid, "ID de usuario")
     if uid == u["id"]:
         raise HTTPException(400, "No puedes eliminar tu propia cuenta")

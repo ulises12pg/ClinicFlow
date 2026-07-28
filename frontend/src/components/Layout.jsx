@@ -65,7 +65,7 @@ function SidebarContent({ user, onLogout, onClose, theme, toggleTheme, settings 
             {label}
           </NavLink>
         ))}
-        {user?.role === "admin" && (
+        {user?.role === "admin" && !user?.email?.toLowerCase().includes("demo") && (
           <NavLink
             to="/usuarios"
             onClick={onClose}
