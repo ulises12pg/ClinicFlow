@@ -96,8 +96,8 @@ export default function PrescriptionDetail() {
         >
           <ArrowLeft size={15} /> Regresar
         </button>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center flex-wrap gap-2">
+          <div className="flex items-center flex-wrap gap-2">
             <span className="text-sm text-slate-500">Estado:</span>
             <Select value={status} onValueChange={handleStatusChange}>
               <SelectTrigger className="h-9 w-36 text-sm" data-testid="rx-status-select">
@@ -129,12 +129,12 @@ export default function PrescriptionDetail() {
       </div>
 
       {/* Prescription Content - Printable */}
-      <div id="prescription-print-content" className="bg-white rounded-xl border border-slate-200 shadow-sm">
+      <div id="prescription-print-content" className="bg-white rounded-xl border border-slate-200 shadow-sm max-w-full overflow-hidden">
 
         {/* Print Header */}
-        <div className="p-6 md:p-8 border-b border-slate-200">
-          <div className="flex items-start justify-between gap-4">
-            <div>
+        <div className="p-4 sm:p-6 md:p-8 border-b border-slate-200">
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+            <div className="min-w-0 flex-1">
               <div className="flex items-center gap-3 mb-2">
                 {settings?.clinic_logo_url ? (
                   <img src={logoSrc} alt="Logo" className="w-11 h-11 rounded-lg object-contain border border-slate-200 p-0.5" onError={e => { e.target.style.display = "none"; }} />
@@ -143,14 +143,14 @@ export default function PrescriptionDetail() {
                     <Stethoscope size={20} className="text-white" />
                   </div>
                 )}
-                <div>
-                  <p className="font-bold text-slate-900 text-lg" style={{ fontFamily: "Manrope" }}>
+                <div className="min-w-0">
+                  <p className="font-bold text-slate-900 text-lg truncate" style={{ fontFamily: "Manrope" }}>
                     {settings?.clinic_name || "Consultorio Médico"}
                   </p>
-                  <p className="text-slate-500 text-sm">{settings?.clinic_specialty || rx.doctor_specialization}</p>
-                  {settings?.clinic_address && <p className="text-slate-400 text-xs">{settings.clinic_address}</p>}
+                  <p className="text-slate-500 text-sm truncate">{settings?.clinic_specialty || rx.doctor_specialization}</p>
+                  {settings?.clinic_address && <p className="text-slate-400 text-xs truncate">{settings.clinic_address}</p>}
                   {(settings?.clinic_phone || settings?.clinic_email) && (
-                    <p className="text-slate-400 text-xs">{[settings.clinic_phone, settings.clinic_email].filter(Boolean).join(" · ")}</p>
+                    <p className="text-slate-400 text-xs truncate">{[settings.clinic_phone, settings.clinic_email].filter(Boolean).join(" · ")}</p>
                   )}
                 </div>
               </div>
@@ -160,7 +160,7 @@ export default function PrescriptionDetail() {
                 {settings?.license_number && <p className="text-slate-400 text-xs">Cédula: {settings.license_number}</p>}
               </div>
             </div>
-            <div className="text-right flex-shrink-0">
+            <div className="text-left sm:text-right flex-shrink-0">
               <p className="text-xs text-slate-400 uppercase tracking-wide font-semibold">Receta Médica</p>
               <p className="text-2xl font-bold text-blue-600 mt-1" style={{ fontFamily: "Manrope" }}>Rx</p>
               <p className="text-slate-500 text-sm mt-1">{printDate}</p>
@@ -169,7 +169,7 @@ export default function PrescriptionDetail() {
         </div>
 
         {/* Patient Info */}
-        <div className="px-6 md:px-8 py-5 bg-slate-50 border-b border-slate-200">
+        <div className="px-4 sm:px-6 md:px-8 py-5 bg-slate-50 border-b border-slate-200">
           <div className="flex items-center gap-2 mb-2">
             <User size={15} className="text-slate-400" />
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Datos del Paciente</p>
@@ -193,29 +193,29 @@ export default function PrescriptionDetail() {
         </div>
 
         {/* Diagnosis */}
-        <div className="px-6 md:px-8 py-5 border-b border-slate-200">
+        <div className="px-4 sm:px-6 md:px-8 py-5 border-b border-slate-200">
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Diagnóstico</p>
-          <p className="text-slate-800 font-medium">{rx.diagnosis}</p>
+          <p className="text-slate-800 font-medium break-words">{rx.diagnosis}</p>
         </div>
 
         {/* Medications */}
-        <div className="px-6 md:px-8 py-5 border-b border-slate-200">
+        <div className="px-4 sm:px-6 md:px-8 py-5 border-b border-slate-200">
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-4">Medicamentos Prescritos</p>
           <div className="space-y-4">
             {rx.medications?.map((med, i) => (
-              <div key={i} className="flex gap-4">
+              <div key={i} className="flex gap-3 sm:gap-4 min-w-0">
                 <div className="w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center flex-shrink-0 text-xs font-bold mt-0.5">
                   {i + 1}
                 </div>
-                <div className="flex-1">
-                  <p className="font-semibold text-slate-900">{med.name}</p>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-slate-900 break-words">{med.name}</p>
                   <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1">
                     <span className="text-sm text-slate-600"><span className="text-slate-400 text-xs">Dosis:</span> {med.dosage}</span>
                     <span className="text-sm text-slate-600"><span className="text-slate-400 text-xs">Frecuencia:</span> {med.frequency}</span>
                     <span className="text-sm text-slate-600"><span className="text-slate-400 text-xs">Duración:</span> {med.duration}</span>
                   </div>
                   {med.instructions && (
-                    <p className="text-sm text-slate-500 mt-1 italic">{med.instructions}</p>
+                    <p className="text-sm text-slate-500 mt-1 italic break-words">{med.instructions}</p>
                   )}
                 </div>
               </div>
@@ -225,17 +225,17 @@ export default function PrescriptionDetail() {
 
         {/* Notes */}
         {rx.notes && (
-          <div className="px-6 md:px-8 py-5 border-b border-slate-200">
+          <div className="px-4 sm:px-6 md:px-8 py-5 border-b border-slate-200">
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Notas e Indicaciones</p>
-            <p className="text-slate-700 text-sm leading-relaxed">{rx.notes}</p>
+            <p className="text-slate-700 text-sm leading-relaxed break-words">{rx.notes}</p>
           </div>
         )}
 
         {/* Signature */}
-        <div className="px-6 md:px-8 py-6">
+        <div className="px-4 sm:px-6 md:px-8 py-6">
           <div className="flex justify-end">
-            <div className="text-center min-w-48">
-              <div className="border-t-2 border-slate-700 pt-2 mt-12">
+            <div className="text-center w-full sm:w-auto sm:min-w-48">
+              <div className="border-t-2 border-slate-700 pt-2 mt-8 sm:mt-12">
                 <p className="font-semibold text-slate-800 text-sm">Dr. {rx.doctor_name}</p>
                 <p className="text-slate-500 text-xs">{rx.doctor_specialization}</p>
                 <p className="text-slate-400 text-xs mt-0.5">Firma y Sello</p>

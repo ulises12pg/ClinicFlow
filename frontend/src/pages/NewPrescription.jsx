@@ -193,7 +193,7 @@ export default function NewPrescription() {
             <User size={16} className="text-blue-600" /> Paciente
           </h2>
           {selectedPatient ? (
-            <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
+            <div className="flex items-center justify-between flex-wrap gap-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 bg-blue-600 rounded-full flex items-center justify-center">
                   <span className="text-white font-semibold text-sm">{selectedPatient.name?.[0]?.toUpperCase()}</span>
@@ -403,8 +403,8 @@ export default function NewPrescription() {
 
                       {/* Stock indicator + quantity field when linked */}
                       {linkedItem && dispenseFromInventory && (
-                        <div className="flex items-center gap-2 mt-2">
-                          <Label className="text-xs font-medium text-slate-600 whitespace-nowrap">Cantidad a surtir:</Label>
+                        <div className="flex items-center flex-wrap gap-2 mt-2 p-2 bg-slate-100/70 rounded-md">
+                          <Label className="text-xs font-medium text-slate-600">Cantidad a surtir:</Label>
                           <Input
                             type="number"
                             min="1"
@@ -419,7 +419,7 @@ export default function NewPrescription() {
                             Disponibles: {linkedItem.quantity}
                           </span>
                           {insufficientStock && (
-                            <span className="inline-flex items-center gap-1 text-xs text-red-600 ml-auto">
+                            <span className="inline-flex items-center gap-1 text-xs text-red-600 w-full sm:w-auto">
                               <AlertTriangle size={12} /> Stock insuficiente
                             </span>
                           )}

@@ -101,16 +101,16 @@ export default function Prescriptions() {
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto max-w-full">
+            <table className="w-full text-sm min-w-[480px] sm:min-w-0">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50">
-                  <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Paciente</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden md:table-cell">Diagnóstico</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden lg:table-cell">Médico</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden sm:table-cell">Fecha</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Estado</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide text-right">Acciones</th>
+                  <th className="text-left px-3 sm:px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Paciente</th>
+                  <th className="text-left px-3 sm:px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden md:table-cell">Diagnóstico</th>
+                  <th className="text-left px-3 sm:px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden lg:table-cell">Médico</th>
+                  <th className="text-left px-3 sm:px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden sm:table-cell">Fecha</th>
+                  <th className="text-left px-3 sm:px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Estado</th>
+                  <th className="px-3 sm:px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody>
@@ -120,23 +120,23 @@ export default function Prescriptions() {
                     className="border-b border-slate-50 hover:bg-slate-50 transition-colors"
                     data-testid={`rx-row-${rx.id}`}
                   >
-                    <td className="px-5 py-3.5">
-                      <div>
-                        <p className="font-medium text-slate-900">{rx.patient_name}</p>
-                        <p className="text-xs text-slate-400 md:hidden">{rx.diagnosis}</p>
+                    <td className="px-3 sm:px-5 py-3.5 max-w-[160px] sm:max-w-none">
+                      <div className="min-w-0">
+                        <p className="font-medium text-slate-900 truncate sm:whitespace-normal">{rx.patient_name}</p>
+                        <p className="text-xs text-slate-400 truncate md:hidden">{rx.diagnosis}</p>
                       </div>
                     </td>
-                    <td className="px-4 py-3.5 text-slate-600 hidden md:table-cell max-w-xs">
+                    <td className="px-3 sm:px-4 py-3.5 text-slate-600 hidden md:table-cell max-w-xs">
                       <p className="truncate">{rx.diagnosis}</p>
                     </td>
-                    <td className="px-4 py-3.5 text-slate-600 hidden lg:table-cell">Dr. {rx.doctor_name}</td>
-                    <td className="px-4 py-3.5 text-slate-500 hidden sm:table-cell text-xs">{rx.date}</td>
-                    <td className="px-4 py-3.5">
+                    <td className="px-3 sm:px-4 py-3.5 text-slate-600 hidden lg:table-cell">Dr. {rx.doctor_name}</td>
+                    <td className="px-3 sm:px-4 py-3.5 text-slate-500 hidden sm:table-cell text-xs">{rx.date}</td>
+                    <td className="px-3 sm:px-4 py-3.5">
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium badge-${rx.status}`}>
                         {rx.status}
                       </span>
                     </td>
-                    <td className="px-4 py-3.5 text-right">
+                    <td className="px-3 sm:px-4 py-3.5 text-right">
                       <div className="flex items-center justify-end gap-1">
                         <button
                           onClick={() => navigate(`/recetas/${rx.id}`)}
