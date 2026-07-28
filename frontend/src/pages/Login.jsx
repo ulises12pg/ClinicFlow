@@ -28,7 +28,7 @@ export default function Login() {
   const [contactName, setContactName] = useState("");
   const [subscriptionPlan, setSubscriptionPlan] = useState("Plan Mensual (Suscripción)");
   const [contactNotes, setContactNotes] = useState("");
-  const [whatsappPhone, setWhatsappPhone] = useState(process.env.REACT_APP_DEVELOPER_WHATSAPP || "+52 55 1234 5678");
+  const [whatsappPhone, setWhatsappPhone] = useState(process.env.REACT_APP_DEVELOPER_WHATSAPP || "+52 7712323897");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -292,7 +292,7 @@ export default function Login() {
                 type="text"
                 value={whatsappPhone}
                 onChange={(e) => setWhatsappPhone(e.target.value)}
-                placeholder="+52 55 1234 5678"
+                placeholder="+52 7712323897"
                 className="h-10 text-sm font-mono text-slate-600 bg-slate-50"
               />
             </div>
