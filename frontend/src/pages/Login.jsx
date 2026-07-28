@@ -27,8 +27,7 @@ export default function Login() {
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [contactName, setContactName] = useState("");
   const [subscriptionPlan, setSubscriptionPlan] = useState("Plan Mensual (Suscripción)");
-  const [contactNotes, setContactNotes] = useState("");
-  const [whatsappPhone, setWhatsappPhone] = useState(process.env.REACT_APP_DEVELOPER_WHATSAPP || "+52 7712323897");
+  const DEVELOPER_WHATSAPP = process.env.REACT_APP_DEVELOPER_WHATSAPP || "527712323897";
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -64,9 +63,8 @@ export default function Login() {
   };
 
   const handleSendWhatsApp = () => {
-    const cleanPhone = whatsappPhone.replace(/[^0-9]/g, "");
-    const message = `¡Hola! 👋 Me interesa solicitar acceso de *Administrador* para el sistema *MedConsulta / ClinicFlow*.\n\n📌 *Detalles de la Solicitud:*\n• *Nombre / Consultorio:* ${contactName || "No especificado"}\n• *Plan de Interés:* ${subscriptionPlan}\n${contactNotes ? `• *Notas:* ${contactNotes}\n` : ""}\n¿Me podrías brindar más información sobre los detalles de la suscripción y activación de la cuenta Admin? ¡Gracias!`;
-    
+    const cleanPhone = DEVELOPER_WHATSAPP.replace(/[^0-9]/g, "");
+    const message = `¡Hola! 👋 Me interesa solicitar acceso de *Administrador* para el sistema *MedConsulta / ClinicFlow*.\n\n📌 *Detalles de la Solicitud:*\n• *Nombre / Consultorio:* ${contactName || "No especificado"}\n• *Plan de Interés:* ${subscriptionPlan}\n\n¿Me podrías brindar más información sobre los detalles de la suscripción y activación de la cuenta Admin? ¡Gracias!`;
     const encodedMessage = encodeURIComponent(message);
     const whatsappUrl = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodedMessage}`;
     window.open(whatsappUrl, "_blank", "noopener,noreferrer");
@@ -225,94 +223,73 @@ export default function Login() {
 
       {/* Modal para solicitar Acceso Admin vía WhatsApp */}
       <Dialog open={showAdminModal} onOpenChange={setShowAdminModal}>
-        <DialogContent className="sm:max-w-md bg-white">
-          <DialogHeader>
-            <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mb-2">
-              <MessageSquare size={20} />
+        <DialogContent className="sm:max-w-sm bg-white p-5 gap-0">
+          <DialogHeader className="pb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center flex-shrink-0">
+                <ShieldCheck size={18} />
+              </div>
+              <DialogTitle className="text-lg font-bold text-slate-900" style={{ fontFamily: "Manrope" }}>
+                Solicitar Acceso Admin
+              </DialogTitle>
             </div>
-            <DialogTitle className="text-xl font-bold text-slate-900" style={{ fontFamily: "Manrope" }}>
-              Solicitar Acceso Administrador
-            </DialogTitle>
-            <DialogDescription className="text-slate-500 text-sm">
-              Contacta directamente con el Desarrollador por WhatsApp para solicitar credenciales de Administrador y conocer los detalles de la suscripción.
-            </DialogDescription>
+            <DialogDescription className="sr-only">Formulario para solicitar acceso de administrador</DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-2">
+          <div className="space-y-3 py-3">
             {/* Beneficios */}
-            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-1.5">
-              <p className="text-[11px] font-semibold text-slate-700 uppercase tracking-wider">Incluye con la cuenta Administrador:</p>
-              <div className="grid grid-cols-2 gap-1.5 text-xs text-slate-600">
-                <span className="flex items-center gap-1.5"><CheckCircle2 size={13} className="text-emerald-600 flex-shrink-0" /> Administración de Usuarios</span>
-                <span className="flex items-center gap-1.5"><CheckCircle2 size={13} className="text-emerald-600 flex-shrink-0" /> Control de Inventario</span>
-                <span className="flex items-center gap-1.5"><CheckCircle2 size={13} className="text-emerald-600 flex-shrink-0" /> Recetas e Historial PDF</span>
-                <span className="flex items-center gap-1.5"><CheckCircle2 size={13} className="text-emerald-600 flex-shrink-0" /> Soporte & Respaldo</span>
+            <div className="bg-slate-50 border border-slate-100 rounded-lg p-2.5">
+              <div className="grid grid-cols-2 gap-1 text-[11px] text-slate-600">
+                <span className="flex items-center gap-1.5"><CheckCircle2 size={12} className="text-emerald-600 flex-shrink-0" /> Gestión de Usuarios</span>
+                <span className="flex items-center gap-1.5"><CheckCircle2 size={12} className="text-emerald-600 flex-shrink-0" /> Control Inventario</span>
+                <span className="flex items-center gap-1.5"><CheckCircle2 size={12} className="text-emerald-600 flex-shrink-0" /> Recetas & PDF</span>
+                <span className="flex items-center gap-1.5"><CheckCircle2 size={12} className="text-emerald-600 flex-shrink-0" /> Soporte & Respaldo</span>
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <Label className="text-slate-700 font-medium text-xs">Tu Nombre / Nombre de tu Consultorio</Label>
+            <div className="space-y-1">
+              <Label className="text-slate-700 font-medium text-xs">Nombre / Consultorio</Label>
               <Input
                 type="text"
                 value={contactName}
                 onChange={(e) => setContactName(e.target.value)}
-                placeholder="Ej. Dr. Carlos Mendoza / Clínica San José"
-                className="h-10 text-sm"
+                placeholder="Ej. Dr. Carlos Mendoza"
+                className="h-9 text-sm"
+                autoFocus
               />
             </div>
 
-            <div className="space-y-1.5">
-              <Label className="text-slate-700 font-medium text-xs">Plan o Suscripción de Interés</Label>
+            <div className="space-y-1">
+              <Label className="text-slate-700 font-medium text-xs">Plan de Interés</Label>
               <select
                 value={subscriptionPlan}
                 onChange={(e) => setSubscriptionPlan(e.target.value)}
-                className="w-full h-10 px-3 rounded-md border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full h-9 px-3 rounded-md border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="Plan Mensual (Suscripción)">Plan Mensual (Suscripción)</option>
+                <option value="Plan Mensual (Suscripción)">Plan Mensual</option>
                 <option value="Plan Anual (Con Descuento)">Plan Anual (Con Descuento)</option>
-                <option value="Licencia Completa / Personalizada">Licencia Completa / Personalizada</option>
-                <option value="Solicitud de Informes Generales">Solicitud de Informes Generales</option>
+                <option value="Licencia Completa / Personalizada">Licencia Completa</option>
+                <option value="Solicitud de Informes Generales">Solo Informes</option>
               </select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-slate-700 font-medium text-xs">Notas o Consultas Adicionales (Opcional)</Label>
-              <Input
-                type="text"
-                value={contactNotes}
-                onChange={(e) => setContactNotes(e.target.value)}
-                placeholder="Ej. Requiero asesoría para subida de logo e impresión..."
-                className="h-10 text-sm"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-slate-700 font-medium text-xs">WhatsApp del Desarrollador</Label>
-              <Input
-                type="text"
-                value={whatsappPhone}
-                readOnly
-                className="h-10 text-sm font-mono text-slate-700 bg-slate-100/80 cursor-not-allowed select-none font-medium border-slate-200"
-              />
             </div>
           </div>
 
-          <DialogFooter className="gap-2 sm:gap-0 mt-2">
+          <DialogFooter className="gap-2 sm:gap-0 pt-2">
             <Button
               type="button"
               variant="outline"
               onClick={() => setShowAdminModal(false)}
-              className="h-10 text-sm"
+              className="h-9 text-sm"
             >
               Cancelar
             </Button>
             <Button
               type="button"
               onClick={handleSendWhatsApp}
-              className="h-10 bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-sm flex items-center gap-2"
+              className="h-9 bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-sm flex items-center gap-2"
             >
-              <MessageSquare size={16} />
-              Enviar mensaje por WhatsApp
+              <MessageSquare size={15} />
+              Enviar por WhatsApp
             </Button>
           </DialogFooter>
         </DialogContent>
