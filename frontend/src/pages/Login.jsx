@@ -291,9 +291,8 @@ export default function Login() {
               <Input
                 type="text"
                 value={whatsappPhone}
-                onChange={(e) => setWhatsappPhone(e.target.value)}
-                placeholder="+52 7712323897"
-                className="h-10 text-sm font-mono text-slate-600 bg-slate-50"
+                readOnly
+                className="h-10 text-sm font-mono text-slate-700 bg-slate-100/80 cursor-not-allowed select-none font-medium border-slate-200"
               />
             </div>
           </div>
